@@ -48,6 +48,16 @@ export default function GamePage() {
 
       if (!response.ok) {
         console.error("[v0] API returned error:", response.status)
+        let errorText = "Unknown error"
+        try {
+          const errorData = await response.json()
+          errorText = errorData.error || errorData.details || errorText
+        } catch (e) {
+          errorText = await response.text()
+        }
+        console.error("[v0] Error details:", errorText)
+
+        // Create default state on error
         const newState: GameStateData = {
           camera: { x: 0, y: 0, zoom: 2 },
           buildings: [],
@@ -71,7 +81,15 @@ export default function GamePage() {
         return
       }
 
-      const data = await response.json()
+      let data
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        console.error("[v0] Failed to parse response as JSON:", parseError)
+        const text = await response.text()
+        console.error("[v0] Response text:", text)
+        throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`)
+      }
 
       setLoadingProgress(60)
       setLoadingText("Deploying units...")
