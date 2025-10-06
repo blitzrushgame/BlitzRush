@@ -1,14 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
-
-const getDatabaseConnection = () => {
-  const dbUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL
-  if (!dbUrl) {
-    console.error("[v0] No database URL found in environment variables")
-    return null
-  }
-  return neon(dbUrl)
-}
+import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -24,36 +15,38 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing or invalid parameters" }, { status: 400 })
   }
 
-  const sql = getDatabaseConnection()
-  if (!sql) {
-    console.error("[v0] Database connection not available")
-    return NextResponse.json({ error: "Database not configured" }, { status: 500 })
-  }
-
   try {
     console.log("[v0] Querying database for user_game_states...")
-    const result = await sql`
-      SELECT game_data FROM user_game_states
-      WHERE user_id = ${userId} AND world_id = ${mapId}
-    `
 
-    console.log("[v0] Query result:", result.length, "rows found")
+    const supabase = createServiceRoleClient()
+    const { data, error } = await supabase
+      .from("user_game_states")
+      .select("game_data")
+      .eq("user_id", userId)
+      .eq("world_id", mapId)
+      .maybeSingle()
 
-    if (result.length > 0) {
-      const gameData = result[0].game_data
-      console.log("[v0] Game data type:", typeof gameData)
-      console.log("[v0] Returning existing game state")
+    if (error) {
+      console.error("[v0] Database error:", error)
+      throw error
+    }
 
-      // Return the game data directly - it's already a JS object from JSONB
-      return NextResponse.json({ state: gameData })
+    if (data) {
+      console.log("[v0] Game data found, type:", typeof data.game_data)
+      return NextResponse.json({ state: data.game_data })
     }
 
     console.log("[v0] No game state found, returning null")
     return NextResponse.json({ state: null })
   } catch (error) {
     console.error("[v0] Error loading game state:", error)
+
+    if (error instanceof Error) {
+      console.error("[v0] Error message:", error.message)
+      console.error("[v0] Error stack:", error.stack)
+    }
+
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error("[v0] Error details:", errorMessage)
     return NextResponse.json(
       {
         error: "Failed to load game state",
@@ -65,12 +58,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const sql = getDatabaseConnection()
-  if (!sql) {
-    console.error("[v0] Database connection not available")
-    return NextResponse.json({ error: "Database not configured" }, { status: 500 })
-  }
-
   try {
     const body = await request.json()
     const { userId: userIdRaw, mapId: mapIdRaw, state } = body
@@ -84,21 +71,35 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Saving game state for userId:", userId, "mapId:", mapId)
 
-    await sql`
-      INSERT INTO user_game_states (user_id, world_id, game_data, last_updated)
-      VALUES (${userId}, ${mapId}, ${JSON.stringify(state)}::jsonb, NOW())
-      ON CONFLICT (user_id, world_id)
-      DO UPDATE SET
-        game_data = ${JSON.stringify(state)}::jsonb,
-        last_updated = NOW()
-    `
+    const supabase = createServiceRoleClient()
+    const { error } = await supabase.from("user_game_states").upsert(
+      {
+        user_id: userId,
+        world_id: mapId,
+        game_data: state,
+        last_updated: new Date().toISOString(),
+      },
+      {
+        onConflict: "user_id,world_id",
+      },
+    )
+
+    if (error) {
+      console.error("[v0] Database error:", error)
+      throw error
+    }
 
     console.log("[v0] Game state saved successfully")
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[v0] Error saving game state:", error)
+
+    if (error instanceof Error) {
+      console.error("[v0] Error message:", error.message)
+      console.error("[v0] Error stack:", error.stack)
+    }
+
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error("[v0] Error details:", errorMessage)
     return NextResponse.json(
       {
         error: "Failed to save game state",
