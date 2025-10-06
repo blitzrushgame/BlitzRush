@@ -305,12 +305,18 @@ export default function GameCanvas({
             style={{ width: "900px" }}
           >
             <div className="p-6">
-              <div className="mb-4 flex justify-center">
+              <div className="mb-4 flex justify-between items-center px-4">
                 <a
                   href="/alliance"
                   className="inline-block px-6 py-2 bg-neutral-700/50 hover:bg-neutral-600/50 border border-amber-500/30 rounded text-amber-400 font-semibold transition-all hover:shadow-lg hover:shadow-amber-500/20"
                 >
                   ALLIANCE
+                </a>
+                <a
+                  href="/profile"
+                  className="inline-block px-6 py-2 bg-neutral-700/50 hover:bg-neutral-600/50 border border-amber-500/30 rounded text-amber-400 font-semibold transition-all hover:shadow-lg hover:shadow-amber-500/20"
+                >
+                  PROFILE
                 </a>
               </div>
 
@@ -340,13 +346,39 @@ export default function GameCanvas({
           <div className="flex justify-center">
             <button
               onClick={() => setShowMapMenu(!showMapMenu)}
-              className="relative bg-neutral-800/95 backdrop-blur-md border-x border-b border-amber-500/30 hover:bg-neutral-700/95 transition-all duration-300 shadow-xl group"
+              className="relative bg-neutral-800/95 backdrop-blur-md hover:bg-neutral-700/95 transition-all duration-300 shadow-xl group"
               style={{
                 width: "200px",
                 height: "50px",
                 clipPath: "polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%)",
               }}
             >
+              {/* Yellow outline using pseudo-element */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  clipPath: "polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%)",
+                }}
+              >
+                <svg
+                  className="absolute inset-0 w-full h-full"
+                  style={{ overflow: "visible" }}
+                  preserveAspectRatio="none"
+                >
+                  <path
+                    d="M 0 0 L 200 0 L 180 50 L 20 50 Z"
+                    fill="none"
+                    stroke="#eab308"
+                    strokeWidth="2"
+                    vectorEffect="non-scaling-stroke"
+                    style={{
+                      strokeDasharray: "200 200 180",
+                      strokeDashoffset: "0",
+                    }}
+                  />
+                </svg>
+              </div>
+
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-amber-400 font-bold text-sm">MENU</span>
                 <div className="flex gap-1 mt-0.5">

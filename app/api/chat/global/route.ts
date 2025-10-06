@@ -8,7 +8,7 @@ export async function GET() {
     .from("global_chat")
     .select("*")
     .order("created_at", { ascending: true })
-    .limit(50)
+    .limit(5)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

@@ -1,37 +1,34 @@
 "use client"
 
-import type React from "react"
-
 import { useEffect, useState } from "react"
-import { createBrowserClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Trophy, Users, Target } from "lucide-react"
 
-interface Profile {
-  id: string
+interface UserProfile {
+  id: number
   username: string
-  display_name: string | null
-  avatar_url: string | null
-  bio: string | null
-  created_at: string
+  bio: string
+  profile_picture: string
+  points: number
+  leaderboard_rank: number | null
+  alliance_id: number | null
+  alliance_name: string | null
 }
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isEditing, setIsEditing] = useState(false)
-  const [displayName, setDisplayName] = useState("")
   const [bio, setBio] = useState("")
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [profilePicture, setProfilePicture] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const router = useRouter()
-  const supabase = createBrowserClient()
 
   useEffect(() => {
     loadProfile()
@@ -39,38 +36,24 @@ export default function ProfilePage() {
 
   async function loadProfile() {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const authRes = await fetch("/api/auth/check")
+      const authData = await authRes.json()
 
-      if (!user) {
-        router.push("/auth/login")
+      if (!authData.authenticated) {
+        router.push("/")
         return
       }
 
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+      const profileRes = await fetch(`/api/profile/${authData.userId}`)
+      const profileData = await profileRes.json()
 
-      if (error) throw error
-
-      setProfile(data)
-      setDisplayName(data.display_name || "")
-      setBio(data.bio || "")
+      setProfile(profileData)
+      setBio(profileData.bio || "")
+      setProfilePicture(profileData.profile_picture || "")
     } catch (error) {
       console.error("Error loading profile:", error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) {
-      setAvatarFile(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
     }
   }
 
@@ -79,42 +62,19 @@ export default function ProfilePage() {
 
     setSaving(true)
     try {
-      let avatarUrl = profile.avatar_url
+      const res = await fetch(`/api/profile/${profile.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bio,
+          profile_picture: profilePicture,
+        }),
+      })
 
-      // Upload avatar if changed
-      if (avatarFile) {
-        const fileExt = avatarFile.name.split(".").pop()
-        const fileName = `${profile.id}-${Date.now()}.${fileExt}`
-        const filePath = `avatars/${fileName}`
-
-        const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, avatarFile)
-
-        if (uploadError) throw uploadError
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("avatars").getPublicUrl(filePath)
-
-        avatarUrl = publicUrl
-      }
-
-      // Update profile
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          display_name: displayName,
-          bio: bio,
-          avatar_url: avatarUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id)
-
-      if (error) throw error
+      if (!res.ok) throw new Error("Failed to save profile")
 
       await loadProfile()
       setIsEditing(false)
-      setAvatarFile(null)
-      setAvatarPreview(null)
     } catch (error) {
       console.error("Error saving profile:", error)
       alert("Failed to save profile. Please try again.")
@@ -123,61 +83,58 @@ export default function ProfilePage() {
     }
   }
 
-  function formatDate(dateString: string) {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
-  }
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
-        <div className="text-amber-500 text-xl">Loading profile...</div>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-amber-400 text-xl">Loading profile...</div>
       </div>
     )
   }
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-red-500 text-xl">Profile not found</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-8">
+    <div className="min-h-screen bg-gray-900 p-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-amber-500">COMMANDER PROFILE</h1>
+          <h1 className="text-4xl font-bold text-amber-400">COMMANDER PROFILE</h1>
           <Button
-            onClick={() => router.push("/worlds")}
+            onClick={() => router.push("/game")}
             variant="outline"
-            className="border-amber-500 text-amber-500 hover:bg-amber-500 hover:text-slate-900"
+            className="border-amber-500 text-amber-400 hover:bg-amber-500 hover:text-gray-900"
           >
-            Back to Worlds
+            Back to Game
           </Button>
         </div>
 
-        <Card className="bg-slate-800/50 border-amber-500/30">
+        <Card className="bg-neutral-800/95 border-amber-500/30 backdrop-blur-md">
           <CardHeader>
             <div className="flex justify-between items-start">
-              <div className="flex items-center gap-4">
-                <Avatar className="w-24 h-24 border-2 border-amber-500">
-                  <AvatarImage src={avatarPreview || profile.avatar_url || ""} />
-                  <AvatarFallback className="bg-slate-700 text-amber-500 text-2xl">
+              <div className="flex items-center gap-6">
+                <Avatar className="w-32 h-32 border-4 border-amber-500">
+                  <AvatarImage src={isEditing ? profilePicture : profile.profile_picture} />
+                  <AvatarFallback className="bg-neutral-700 text-amber-400 text-3xl">
                     {profile.username.substring(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <CardTitle className="text-2xl text-amber-500">{profile.display_name || profile.username}</CardTitle>
-                  <CardDescription className="text-slate-400">@{profile.username}</CardDescription>
+                  <CardTitle className="text-3xl text-amber-400 mb-2">{profile.username}</CardTitle>
+                  <div className="flex items-center gap-2 text-neutral-400">
+                    <Trophy className="w-4 h-4" />
+                    <span className="text-sm">
+                      Rank #{profile.leaderboard_rank || "Unranked"} • {profile.points.toLocaleString()} Points
+                    </span>
+                  </div>
                 </div>
               </div>
               {!isEditing && (
-                <Button onClick={() => setIsEditing(true)} className="bg-amber-500 text-slate-900 hover:bg-amber-600">
+                <Button onClick={() => setIsEditing(true)} className="bg-amber-500 text-gray-900 hover:bg-amber-600">
                   Edit Profile
                 </Button>
               )}
@@ -188,91 +145,91 @@ export default function ProfilePage() {
             {isEditing ? (
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="avatar" className="text-amber-500">
-                    Profile Picture
+                  <Label htmlFor="profilePicture" className="text-amber-400">
+                    Profile Picture URL
                   </Label>
                   <Input
-                    id="avatar"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarChange}
-                    className="bg-slate-700 border-slate-600 text-slate-200"
+                    id="profilePicture"
+                    value={profilePicture}
+                    onChange={(e) => setProfilePicture(e.target.value)}
+                    placeholder="Enter image URL or use /placeholder.svg?height=128&width=128"
+                    className="bg-neutral-700 border-neutral-600 text-neutral-200"
                   />
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Tip: Use /placeholder.svg?height=128&width=128&query=your description
+                  </p>
                 </div>
 
                 <div>
-                  <Label htmlFor="displayName" className="text-amber-500">
-                    Display Name
-                  </Label>
-                  <Input
-                    id="displayName"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Enter display name"
-                    className="bg-slate-700 border-slate-600 text-slate-200"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="bio" className="text-amber-500">
+                  <Label htmlFor="bio" className="text-amber-400">
                     Biography
                   </Label>
                   <Textarea
                     id="bio"
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
-                    placeholder="Tell us about yourself..."
+                    placeholder="Tell others about yourself..."
                     rows={4}
-                    className="bg-slate-700 border-slate-600 text-slate-200"
+                    maxLength={500}
+                    className="bg-neutral-700 border-neutral-600 text-neutral-200"
                   />
+                  <p className="text-xs text-neutral-500 mt-1">{bio.length}/500 characters</p>
                 </div>
 
                 <div className="flex gap-2">
                   <Button
                     onClick={handleSave}
                     disabled={saving}
-                    className="bg-amber-500 text-slate-900 hover:bg-amber-600"
+                    className="bg-amber-500 text-gray-900 hover:bg-amber-600"
                   >
                     {saving ? "Saving..." : "Save Changes"}
                   </Button>
                   <Button
                     onClick={() => {
                       setIsEditing(false)
-                      setDisplayName(profile.display_name || "")
                       setBio(profile.bio || "")
-                      setAvatarFile(null)
-                      setAvatarPreview(null)
+                      setProfilePicture(profile.profile_picture || "")
                     }}
                     variant="outline"
-                    className="border-slate-600 text-slate-300"
+                    className="border-neutral-600 text-neutral-300 hover:bg-neutral-700"
                   >
                     Cancel
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div>
-                  <h3 className="text-amber-500 font-semibold mb-2">Biography</h3>
-                  <p className="text-slate-300">{profile.bio || "No biography set yet."}</p>
+                  <h3 className="text-amber-400 font-semibold mb-2 flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    Biography
+                  </h3>
+                  <p className="text-neutral-300">{profile.bio || "No biography set yet."}</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-700">
-                  <div>
-                    <h3 className="text-amber-500 font-semibold mb-1">Account Created</h3>
-                    <p className="text-slate-300">{formatDate(profile.created_at)}</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-neutral-700">
+                  <div className="bg-neutral-900/50 p-4 rounded-lg border border-amber-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Trophy className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-amber-400 font-semibold">Points</h3>
+                    </div>
+                    <p className="text-2xl font-bold text-neutral-200">{profile.points.toLocaleString()}</p>
                   </div>
-                  <div>
-                    <h3 className="text-amber-500 font-semibold mb-1">Rank</h3>
-                    <p className="text-slate-400 italic">Coming Soon</p>
+
+                  <div className="bg-neutral-900/50 p-4 rounded-lg border border-amber-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-amber-400 font-semibold">Leaderboard</h3>
+                    </div>
+                    <p className="text-2xl font-bold text-neutral-200">#{profile.leaderboard_rank || "Unranked"}</p>
                   </div>
-                  <div>
-                    <h3 className="text-amber-500 font-semibold mb-1">Alliance</h3>
-                    <p className="text-slate-400 italic">Coming Soon</p>
-                  </div>
-                  <div>
-                    <h3 className="text-amber-500 font-semibold mb-1">Leaderboard Position</h3>
-                    <p className="text-slate-400 italic">Coming Soon</p>
+
+                  <div className="bg-neutral-900/50 p-4 rounded-lg border border-amber-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-amber-400 font-semibold">Alliance</h3>
+                    </div>
+                    <p className="text-lg font-semibold text-neutral-200">{profile.alliance_name || "No Alliance"}</p>
                   </div>
                 </div>
               </div>
