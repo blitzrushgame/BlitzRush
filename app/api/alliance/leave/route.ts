@@ -37,6 +37,8 @@ export async function POST() {
     return NextResponse.json({ error: deleteError.message }, { status: 500 })
   }
 
+  await supabase.from("users").update({ alliance_id: null }).eq("id", user.id)
+
   // Update member count
   await supabase
     .from("alliances")

@@ -65,6 +65,14 @@ export default function GameCanvas({
     window.addEventListener("resize", resizeCanvas)
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement
+      const isTyping = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+
+      // If user is typing, don't process WASD keys for camera movement
+      if (isTyping) {
+        return
+      }
+
       keysRef.current.add(e.key.toLowerCase())
     }
 

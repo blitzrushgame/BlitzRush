@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { Shield, Trophy, Users } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Shield, Trophy, Users, Mail } from "lucide-react"
 
 interface Alliance {
   id: number
@@ -33,6 +33,19 @@ export default function AllianceLeaderboard({ alliances, currentUserId }: Allian
   const [isPublic, setIsPublic] = useState(true)
   const [minPoints, setMinPoints] = useState(0)
   const [error, setError] = useState("")
+  const [pendingInvites, setPendingInvites] = useState<any[]>([])
+
+  useEffect(() => {
+    fetchPendingInvites()
+  }, [])
+
+  const fetchPendingInvites = async () => {
+    const response = await fetch("/api/alliance/invites")
+    if (response.ok) {
+      const data = await response.json()
+      setPendingInvites(data.invites || [])
+    }
+  }
 
   const handleCreateAlliance = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,6 +84,22 @@ export default function AllianceLeaderboard({ alliances, currentUserId }: Allian
     }
   }
 
+  const handleRespondToInvite = async (inviteId: number, action: "accept" | "reject") => {
+    const response = await fetch("/api/alliance/respond-invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inviteId, action }),
+    })
+
+    if (response.ok) {
+      if (action === "accept") {
+        window.location.href = "/alliance"
+      } else {
+        fetchPendingInvites()
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-100 p-8">
       <div className="max-w-7xl mx-auto">
@@ -98,6 +127,54 @@ export default function AllianceLeaderboard({ alliances, currentUserId }: Allian
             </a>
           </div>
         </div>
+
+        {pendingInvites.length > 0 && (
+          <div className="mb-8 bg-neutral-800 border border-amber-500/30 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Mail className="w-6 h-6 text-amber-400" />
+              <h2 className="text-2xl font-bold text-amber-400">Pending Invites</h2>
+            </div>
+            <div className="space-y-4">
+              {pendingInvites.map((invite) => (
+                <div
+                  key={invite.id}
+                  className="bg-neutral-900 border border-neutral-700 rounded-lg p-4 flex items-center justify-between"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Shield className="w-5 h-5 text-amber-400" />
+                      <span className="font-bold text-lg">
+                        [{invite.alliances.tag}] {invite.alliances.name}
+                      </span>
+                    </div>
+                    <div className="text-neutral-400 text-sm">
+                      Invited by <span className="text-amber-400">{invite.invited_by_user.username}</span>
+                    </div>
+                    {invite.message && <div className="text-neutral-400 text-sm mt-1">{invite.message}</div>}
+                    <div className="text-neutral-500 text-xs mt-2">
+                      {invite.alliances.member_count} / {invite.alliances.max_members} members •{" "}
+                      {invite.alliances.total_points.toLocaleString()} points
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleRespondToInvite(invite.id, "accept")}
+                      className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded transition-all font-semibold"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => handleRespondToInvite(invite.id, "reject")}
+                      className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded transition-all font-semibold"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Leaderboard */}
         <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">

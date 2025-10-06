@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import GameCanvas from "@/components/game-canvas-persistent"
-import { GameChat } from "@/components/game-chat"
+import { GameChat, type GameChatRef } from "@/components/game-chat"
 import type { GameStateData } from "@/lib/types/game"
 
 export default function GamePage() {
@@ -16,6 +16,7 @@ export default function GamePage() {
   const [username, setUsername] = useState<string>("")
   const [allianceId, setAllianceId] = useState<number | undefined>(undefined)
   const [currentMap, setCurrentMap] = useState<number>(1)
+  const chatRef = useRef<GameChatRef>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -38,6 +39,24 @@ export default function GamePage() {
 
     checkAuth()
   }, [currentMap])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only focus chat if Enter is pressed and no input/textarea is currently focused
+      if (e.key === "Enter") {
+        const activeElement = document.activeElement
+        const isInputFocused = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+
+        if (!isInputFocused) {
+          e.preventDefault()
+          chatRef.current?.focusGlobalChat()
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
   const loadGameState = async (userId: number, mapId: number) => {
     try {
@@ -207,7 +226,7 @@ export default function GamePage() {
         onMapChange={handleMapChange}
         currentMap={currentMap}
       />
-      {userId && <GameChat userId={userId} username={username} allianceId={allianceId} />}
+      {userId && <GameChat ref={chatRef} userId={userId} username={username} allianceId={allianceId} />}
     </>
   )
 }

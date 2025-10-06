@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Shield, Crown, Users, Settings, UserMinus, UserPlus } from "lucide-react"
 
@@ -59,8 +61,16 @@ export default function AllianceManagement({
   currentUserId,
   joinRequests,
 }: AllianceManagementProps) {
-  const [activeTab, setActiveTab] = useState<"members" | "requests" | "settings">("members")
+  const [activeTab, setActiveTab] = useState<"members" | "requests" | "invite" | "settings">("members")
   const [newsletter, setNewsletter] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [inviteMessage, setInviteMessage] = useState("")
+  const [settingsDescription, setSettingsDescription] = useState(alliance.description || "")
+  const [settingsMinPoints, setSettingsMinPoints] = useState(alliance.min_points_required)
+  const [settingsIsPublic, setSettingsIsPublic] = useState(alliance.is_public)
+  const [isSavingSettings, setIsSavingSettings] = useState(false)
 
   const isLeader = currentUserRole === "leader"
   const isCoLeader = currentUserRole === "co-leader"
@@ -116,6 +126,27 @@ export default function AllianceManagement({
     }
   }
 
+  const handleDisbandAlliance = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to disband this alliance? This will remove all members and delete the alliance permanently. This action cannot be undone.",
+      )
+    )
+      return
+
+    const response = await fetch("/api/alliance/disband", {
+      method: "POST",
+    })
+
+    if (response.ok) {
+      alert("Alliance disbanded successfully")
+      window.location.href = "/alliance"
+    } else {
+      const data = await response.json()
+      alert(data.error || "Failed to disband alliance")
+    }
+  }
+
   const handleApproveRequest = async (requestId: number, userId: number) => {
     const response = await fetch("/api/alliance/approve-request", {
       method: "POST",
@@ -138,6 +169,67 @@ export default function AllianceManagement({
     if (response.ok) {
       window.location.reload()
     }
+  }
+
+  const handleSearchUsers = async (query: string) => {
+    setSearchQuery(query)
+
+    if (query.length < 2) {
+      setSearchResults([])
+      return
+    }
+
+    setIsSearching(true)
+    const response = await fetch(`/api/alliance/search-users?q=${encodeURIComponent(query)}`)
+    const data = await response.json()
+
+    if (response.ok) {
+      setSearchResults(data.users || [])
+    }
+    setIsSearching(false)
+  }
+
+  const handleSendInvite = async (userId: number) => {
+    const response = await fetch("/api/alliance/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, message: inviteMessage }),
+    })
+
+    if (response.ok) {
+      alert("Invite sent successfully!")
+      setSearchQuery("")
+      setSearchResults([])
+      setInviteMessage("")
+    } else {
+      const data = await response.json()
+      alert(data.error || "Failed to send invite")
+    }
+  }
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSavingSettings(true)
+
+    const response = await fetch("/api/alliance/update-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        description: settingsDescription,
+        minPointsRequired: settingsMinPoints,
+        isPublic: settingsIsPublic,
+      }),
+    })
+
+    if (response.ok) {
+      alert("Settings saved successfully!")
+      window.location.reload()
+    } else {
+      const data = await response.json()
+      alert(data.error || "Failed to save settings")
+    }
+
+    setIsSavingSettings(false)
   }
 
   return (
@@ -202,22 +294,35 @@ export default function AllianceManagement({
             Members
           </button>
           {canManage && (
-            <button
-              onClick={() => setActiveTab("requests")}
-              className={`px-6 py-3 font-semibold transition-all relative ${
-                activeTab === "requests"
-                  ? "text-amber-400 border-b-2 border-amber-400"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <UserPlus className="w-4 h-4 inline mr-2" />
-              Join Requests
-              {joinRequests.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {joinRequests.length}
-                </span>
-              )}
-            </button>
+            <>
+              <button
+                onClick={() => setActiveTab("requests")}
+                className={`px-6 py-3 font-semibold transition-all relative ${
+                  activeTab === "requests"
+                    ? "text-amber-400 border-b-2 border-amber-400"
+                    : "text-neutral-400 hover:text-neutral-200"
+                }`}
+              >
+                <UserPlus className="w-4 h-4 inline mr-2" />
+                Join Requests
+                {joinRequests.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {joinRequests.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("invite")}
+                className={`px-6 py-3 font-semibold transition-all ${
+                  activeTab === "invite"
+                    ? "text-amber-400 border-b-2 border-amber-400"
+                    : "text-neutral-400 hover:text-neutral-200"
+                }`}
+              >
+                <UserPlus className="w-4 h-4 inline mr-2" />
+                Invite Players
+              </button>
+            </>
           )}
           {isLeader && (
             <button
@@ -353,17 +458,69 @@ export default function AllianceManagement({
           </div>
         )}
 
+        {activeTab === "invite" && canManage && (
+          <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6">
+            <h2 className="text-2xl font-bold text-amber-400 mb-6">Invite Players to Alliance</h2>
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-neutral-300 mb-2">Search for players</label>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => handleSearchUsers(e.target.value)}
+                placeholder="Enter username..."
+                className="w-full bg-neutral-900 border border-neutral-700 rounded px-4 py-3 text-neutral-100 focus:border-amber-500 focus:outline-none"
+              />
+              {isSearching && <div className="text-neutral-400 text-sm mt-2">Searching...</div>}
+            </div>
+
+            {searchResults.length > 0 && (
+              <div className="space-y-3">
+                {searchResults.map((user) => (
+                  <div
+                    key={user.id}
+                    className="bg-neutral-900 border border-neutral-700 rounded-lg p-4 flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="font-semibold text-lg">{user.username}</div>
+                      <div className="text-neutral-400 text-sm">{user.points.toLocaleString()} points</div>
+                    </div>
+                    <button
+                      onClick={() => handleSendInvite(user.id)}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded transition-all"
+                    >
+                      Send Invite
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && (
+              <div className="text-center text-neutral-400 py-8">
+                No available players found. Players must not be in an alliance to receive invites.
+              </div>
+            )}
+
+            {searchQuery.length < 2 && (
+              <div className="text-center text-neutral-400 py-8">Enter at least 2 characters to search for players</div>
+            )}
+          </div>
+        )}
+
         {activeTab === "settings" && isLeader && (
           <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6">
             <h2 className="text-2xl font-bold text-amber-400 mb-6">Alliance Settings</h2>
-            <div className="space-y-6">
+            <form onSubmit={handleSaveSettings} className="space-y-6">
               <div>
                 <label className="block text-sm font-semibold text-neutral-300 mb-2">Alliance Description</label>
                 <textarea
                   className="w-full bg-neutral-900 border border-neutral-700 rounded px-4 py-2 text-neutral-100 focus:border-amber-500 focus:outline-none"
                   rows={4}
-                  defaultValue={alliance.description || ""}
+                  value={settingsDescription}
+                  onChange={(e) => setSettingsDescription(e.target.value)}
                   placeholder="Enter alliance description..."
+                  maxLength={500}
                 />
               </div>
               <div>
@@ -371,24 +528,46 @@ export default function AllianceManagement({
                 <input
                   type="number"
                   className="w-full bg-neutral-900 border border-neutral-700 rounded px-4 py-2 text-neutral-100 focus:border-amber-500 focus:outline-none"
-                  defaultValue={alliance.min_points_required}
+                  value={settingsMinPoints}
+                  onChange={(e) => setSettingsMinPoints(Number.parseInt(e.target.value) || 0)}
+                  min={0}
                 />
               </div>
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
                   id="is_public"
-                  defaultChecked={alliance.is_public}
+                  checked={settingsIsPublic}
+                  onChange={(e) => setSettingsIsPublic(e.target.checked)}
                   className="w-5 h-5 accent-amber-500"
                 />
                 <label htmlFor="is_public" className="text-neutral-300">
                   Public Alliance (anyone can join without approval)
                 </label>
               </div>
-              <button className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded transition-all">
-                Save Settings
+              <button
+                type="submit"
+                disabled={isSavingSettings}
+                className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSavingSettings ? "Saving..." : "Save Settings"}
               </button>
-            </div>
+
+              <div className="border-t border-neutral-700 pt-6 mt-8">
+                <h3 className="text-xl font-bold text-red-400 mb-3">Danger Zone</h3>
+                <p className="text-neutral-400 text-sm mb-4">
+                  Disbanding the alliance will permanently delete it and remove all members. This action cannot be
+                  undone.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDisbandAlliance}
+                  className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 font-semibold rounded border border-red-500/50 transition-all"
+                >
+                  Disband Alliance
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>

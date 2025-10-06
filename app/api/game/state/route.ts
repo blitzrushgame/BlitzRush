@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         world_id: mapId,
         game_data: state,
-        last_updated: new Date().toISOString(),
+        last_played: new Date().toISOString(),
       },
       {
         onConflict: "user_id,world_id",

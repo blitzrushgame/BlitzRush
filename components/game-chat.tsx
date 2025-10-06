@@ -1,12 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import type React from "react"
+
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Send, Trophy, Users, Target, X } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import Link from "next/link"
 
 interface Message {
   id: number
@@ -14,6 +17,8 @@ interface Message {
   message: string
   created_at: string
   user_id: number
+  alliance_tag?: string | null // Added alliance_tag field
+  profile_picture?: string | null // Added profile_picture field
 }
 
 interface GameChatProps {
@@ -30,9 +35,14 @@ interface UserProfile {
   points: number
   leaderboard_rank: number | null
   alliance_name: string | null
+  alliance_id: number | null // Added alliance_id field for linking
 }
 
-export function GameChat({ userId, username, allianceId }: GameChatProps) {
+export interface GameChatRef {
+  focusGlobalChat: () => void
+}
+
+export const GameChat = forwardRef<GameChatRef, GameChatProps>(({ userId, username, allianceId }, ref) => {
   const [globalMessages, setGlobalMessages] = useState<Message[]>([])
   const [allianceMessages, setAllianceMessages] = useState<Message[]>([])
   const [globalInput, setGlobalInput] = useState("")
@@ -41,8 +51,39 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfile | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(false)
+  const [currentTime, setCurrentTime] = useState(new Date()) // Added currentTime state for live timestamp updates
+  const [globalCooldown, setGlobalCooldown] = useState(0) // Added cooldown states
+  const [allianceCooldown, setAllianceCooldown] = useState(0)
   const globalScrollRef = useRef<HTMLDivElement>(null)
   const allianceScrollRef = useRef<HTMLDivElement>(null)
+  const wasAtBottomRef = useRef({ global: true, alliance: true })
+  const globalInputRef = useRef<HTMLInputElement>(null)
+  const allianceInputRef = useRef<HTMLInputElement>(null)
+
+  useImperativeHandle(ref, () => ({
+    focusGlobalChat: () => {
+      setActiveTab("global")
+      setTimeout(() => {
+        globalInputRef.current?.focus()
+      }, 0)
+    },
+  }))
+
+  const isScrolledToBottom = (element: HTMLDivElement | null) => {
+    if (!element) return true
+    const threshold = 100 // pixels from bottom to consider "at bottom"
+    const { scrollTop, scrollHeight, clientHeight } = element
+    return scrollHeight - scrollTop - clientHeight < threshold
+  }
+
+  const scrollToBottom = (ref: React.RefObject<HTMLDivElement>) => {
+    if (ref.current) {
+      const scrollElement = ref.current.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement
+      if (scrollElement) {
+        scrollElement.scrollTop = scrollElement.scrollHeight
+      }
+    }
+  }
 
   useEffect(() => {
     fetchMessages()
@@ -55,6 +96,27 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
       loadUserProfile(selectedUserId)
     }
   }, [selectedUserId])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date()) // Added timer to update timestamps every second
+      setGlobalCooldown((prev) => Math.max(0, prev - 1)) // Added cooldown timer effect
+      setAllianceCooldown((prev) => Math.max(0, prev - 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (wasAtBottomRef.current.global) {
+      scrollToBottom(globalScrollRef)
+    }
+  }, [globalMessages])
+
+  useEffect(() => {
+    if (wasAtBottomRef.current.alliance) {
+      scrollToBottom(allianceScrollRef)
+    }
+  }, [allianceMessages])
 
   const loadUserProfile = async (targetUserId: number) => {
     setLoadingProfile(true)
@@ -70,6 +132,16 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
   }
 
   const fetchMessages = async () => {
+    const globalScrollElement = globalScrollRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    ) as HTMLDivElement
+    const allianceScrollElement = allianceScrollRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    ) as HTMLDivElement
+
+    wasAtBottomRef.current.global = isScrolledToBottom(globalScrollElement)
+    wasAtBottomRef.current.alliance = isScrolledToBottom(allianceScrollElement)
+
     try {
       const globalRes = await fetch("/api/chat/global")
       const globalData = await globalRes.json()
@@ -87,9 +159,12 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
 
   const sendGlobalMessage = async () => {
     if (!globalInput.trim()) return
+    if (globalCooldown > 0) return
+
+    wasAtBottomRef.current.global = true
 
     try {
-      await fetch("/api/chat/global", {
+      const res = await fetch("/api/chat/global", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -98,7 +173,19 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
           message: globalInput,
         }),
       })
+
+      if (res.status === 429) {
+        const data = await res.json()
+        alert(data.error)
+        return
+      }
+
+      if (!res.ok) {
+        throw new Error("Failed to send message")
+      }
+
       setGlobalInput("")
+      setGlobalCooldown(3)
       fetchMessages()
     } catch (error) {
       console.error("Error sending message:", error)
@@ -107,9 +194,12 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
 
   const sendAllianceMessage = async () => {
     if (!allianceInput.trim() || !allianceId) return
+    if (allianceCooldown > 0) return
+
+    wasAtBottomRef.current.alliance = true
 
     try {
-      await fetch("/api/chat/alliance", {
+      const res = await fetch("/api/chat/alliance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -119,7 +209,19 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
           message: allianceInput,
         }),
       })
+
+      if (res.status === 429) {
+        const data = await res.json()
+        alert(data.error)
+        return
+      }
+
+      if (!res.ok) {
+        throw new Error("Failed to send message")
+      }
+
       setAllianceInput("")
+      setAllianceCooldown(3)
       fetchMessages()
     } catch (error) {
       console.error("Error sending message:", error)
@@ -128,11 +230,12 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
+    const diffMs = currentTime.getTime() - date.getTime()
+    const diffSecs = Math.floor(diffMs / 1000)
+    const diffMins = Math.floor(diffSecs / 60)
 
-    if (diffMins < 1) return "just now"
+    if (diffSecs < 5) return "just now"
+    if (diffSecs < 60) return `${diffSecs}s ago`
     if (diffMins < 60) return `${diffMins}m ago`
     const diffHours = Math.floor(diffMins / 60)
     if (diffHours < 24) return `${diffHours}h ago`
@@ -161,29 +264,51 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
             <ScrollArea className="h-64" ref={globalScrollRef}>
               <div className="space-y-2 pr-3">
                 {globalMessages.map((msg) => (
-                  <div key={msg.id} className="text-xs">
-                    <button
-                      onClick={() => setSelectedUserId(msg.user_id)}
-                      className="font-semibold text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
-                    >
-                      {msg.username}
-                    </button>
-                    <span className="text-neutral-400 text-[10px] ml-1">{formatTimestamp(msg.created_at)}</span>
-                    <span className="text-neutral-200 block">{msg.message}</span>
+                  <div key={msg.id} className="flex gap-2 text-xs">
+                    <Avatar className="w-6 h-6 flex-shrink-0">
+                      <AvatarImage src={msg.profile_picture || "/placeholder.svg"} />
+                      <AvatarFallback className="bg-neutral-700 text-amber-400 text-[10px]">
+                        {msg.username.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-1 flex-wrap">
+                        {msg.alliance_tag && <span className="font-bold text-blue-400">[{msg.alliance_tag}]</span>}
+                        <button
+                          onClick={() => setSelectedUserId(msg.user_id)}
+                          className="font-semibold text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
+                        >
+                          {msg.username}
+                        </button>
+                        <span className="text-neutral-400 text-[10px]">({formatTimestamp(msg.created_at)})</span>
+                      </div>
+                      <span className="text-neutral-200 block break-words">{msg.message}</span>
+                    </div>
                   </div>
                 ))}
               </div>
             </ScrollArea>
             <div className="flex gap-2">
               <Input
+                ref={globalInputRef}
                 value={globalInput}
                 onChange={(e) => setGlobalInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendGlobalMessage()}
                 placeholder="Type message..."
                 className="h-8 text-xs bg-neutral-800 border-neutral-700"
+                disabled={globalCooldown > 0}
               />
-              <Button onClick={sendGlobalMessage} size="sm" className="h-8 px-3 bg-amber-600 hover:bg-amber-700">
-                <Send className="h-3 w-3" />
+              <Button
+                onClick={sendGlobalMessage}
+                size="sm"
+                className="h-8 px-3 bg-amber-600 hover:bg-amber-700"
+                disabled={globalCooldown > 0}
+              >
+                {globalCooldown > 0 ? (
+                  <span className="text-[10px]">{globalCooldown}s</span>
+                ) : (
+                  <Send className="h-3 w-3" />
+                )}
               </Button>
             </div>
           </TabsContent>
@@ -194,29 +319,50 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
                 <ScrollArea className="h-64" ref={allianceScrollRef}>
                   <div className="space-y-2 pr-3">
                     {allianceMessages.map((msg) => (
-                      <div key={msg.id} className="text-xs">
-                        <button
-                          onClick={() => setSelectedUserId(msg.user_id)}
-                          className="font-semibold text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
-                        >
-                          {msg.username}
-                        </button>
-                        <span className="text-neutral-400 text-[10px] ml-1">{formatTimestamp(msg.created_at)}</span>
-                        <span className="text-neutral-200 block">{msg.message}</span>
+                      <div key={msg.id} className="flex gap-2 text-xs">
+                        <Avatar className="w-6 h-6 flex-shrink-0">
+                          <AvatarImage src={msg.profile_picture || "/placeholder.svg"} />
+                          <AvatarFallback className="bg-neutral-700 text-blue-400 text-[10px]">
+                            {msg.username.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-1 flex-wrap">
+                            <button
+                              onClick={() => setSelectedUserId(msg.user_id)}
+                              className="font-semibold text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+                            >
+                              {msg.username}
+                            </button>
+                            <span className="text-neutral-400 text-[10px]">({formatTimestamp(msg.created_at)})</span>
+                          </div>
+                          <span className="text-neutral-200 block break-words">{msg.message}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </ScrollArea>
                 <div className="flex gap-2">
                   <Input
+                    ref={allianceInputRef}
                     value={allianceInput}
                     onChange={(e) => setAllianceInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && sendAllianceMessage()}
                     placeholder="Type message..."
                     className="h-8 text-xs bg-neutral-800 border-neutral-700"
+                    disabled={allianceCooldown > 0}
                   />
-                  <Button onClick={sendAllianceMessage} size="sm" className="h-8 px-3 bg-blue-600 hover:bg-blue-700">
-                    <Send className="h-3 w-3" />
+                  <Button
+                    onClick={sendAllianceMessage}
+                    size="sm"
+                    className="h-8 px-3 bg-blue-600 hover:bg-blue-700"
+                    disabled={allianceCooldown > 0}
+                  >
+                    {allianceCooldown > 0 ? (
+                      <span className="text-[10px]">{allianceCooldown}s</span>
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
                   </Button>
                 </div>
               </>
@@ -303,9 +449,17 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
                     <Users className="w-4 h-4 text-amber-400" />
                     <h3 className="text-amber-400 font-semibold text-sm">Alliance</h3>
                   </div>
-                  <p className="text-lg font-semibold text-neutral-200">
-                    {selectedUserProfile.alliance_name || "No Alliance"}
-                  </p>
+                  {selectedUserProfile.alliance_name ? (
+                    <Link
+                      href={`/alliance?view=${selectedUserProfile.alliance_id}`}
+                      className="text-lg font-semibold text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+                      onClick={closeModal}
+                    >
+                      {selectedUserProfile.alliance_name}
+                    </Link>
+                  ) : (
+                    <p className="text-lg font-semibold text-neutral-200">No Alliance</p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -316,4 +470,6 @@ export function GameChat({ userId, username, allianceId }: GameChatProps) {
       )}
     </>
   )
-}
+})
+
+GameChat.displayName = "GameChat"
