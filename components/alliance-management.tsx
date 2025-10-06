@@ -1,0 +1,397 @@
+"use client"
+
+import { useState } from "react"
+import { Shield, Crown, Users, Settings, UserMinus, UserPlus } from "lucide-react"
+
+interface Alliance {
+  id: number
+  name: string
+  tag: string
+  description: string | null
+  leader_id: number
+  created_at: string
+  total_points: number
+  total_bases: number
+  member_count: number
+  max_members: number
+  is_public: boolean
+  min_points_required: number
+}
+
+interface Member {
+  id: number
+  alliance_id: number
+  user_id: number
+  role: string
+  joined_at: string
+  users: {
+    id: number
+    username: string
+    created_at: string
+  }
+}
+
+interface JoinRequest {
+  id: number
+  alliance_id: number
+  user_id: number
+  message: string | null
+  status: string
+  created_at: string
+  users: {
+    id: number
+    username: string
+  }
+}
+
+interface AllianceManagementProps {
+  alliance: Alliance
+  members: Member[]
+  currentUserRole: string
+  currentUserId: number
+  joinRequests: JoinRequest[]
+}
+
+export default function AllianceManagement({
+  alliance,
+  members,
+  currentUserRole,
+  currentUserId,
+  joinRequests,
+}: AllianceManagementProps) {
+  const [activeTab, setActiveTab] = useState<"members" | "requests" | "settings">("members")
+  const [newsletter, setNewsletter] = useState("")
+
+  const isLeader = currentUserRole === "leader"
+  const isCoLeader = currentUserRole === "co-leader"
+  const canManage = isLeader || isCoLeader
+
+  const handlePromoteToCoLeader = async (userId: number) => {
+    const response = await fetch("/api/alliance/promote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, role: "co-leader" }),
+    })
+
+    if (response.ok) {
+      window.location.reload()
+    }
+  }
+
+  const handleDemoteFromCoLeader = async (userId: number) => {
+    const response = await fetch("/api/alliance/promote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, role: "member" }),
+    })
+
+    if (response.ok) {
+      window.location.reload()
+    }
+  }
+
+  const handleKickMember = async (userId: number) => {
+    if (!confirm("Are you sure you want to kick this member?")) return
+
+    const response = await fetch("/api/alliance/kick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    })
+
+    if (response.ok) {
+      window.location.reload()
+    }
+  }
+
+  const handleLeaveAlliance = async () => {
+    if (!confirm("Are you sure you want to leave this alliance?")) return
+
+    const response = await fetch("/api/alliance/leave", {
+      method: "POST",
+    })
+
+    if (response.ok) {
+      window.location.href = "/alliance"
+    }
+  }
+
+  const handleApproveRequest = async (requestId: number, userId: number) => {
+    const response = await fetch("/api/alliance/approve-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId, userId, action: "approve" }),
+    })
+
+    if (response.ok) {
+      window.location.reload()
+    }
+  }
+
+  const handleRejectRequest = async (requestId: number) => {
+    const response = await fetch("/api/alliance/approve-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId, action: "reject" }),
+    })
+
+    if (response.ok) {
+      window.location.reload()
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-neutral-900 text-neutral-100 p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <Shield className="w-12 h-12 text-amber-400" />
+              <div>
+                <h1 className="text-4xl font-bold text-amber-400">
+                  [{alliance.tag}] {alliance.name}
+                </h1>
+                <p className="text-neutral-400 mt-1">{alliance.description || "No description"}</p>
+              </div>
+            </div>
+            <a
+              href="/game"
+              className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 border border-amber-500/30 rounded text-amber-400 transition-all"
+            >
+              Back to Game
+            </a>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-4 gap-4 mt-6">
+            <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
+              <div className="text-neutral-400 text-sm">Total Points</div>
+              <div className="text-2xl font-bold text-amber-400">{alliance.total_points.toLocaleString()}</div>
+            </div>
+            <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
+              <div className="text-neutral-400 text-sm">Total Bases</div>
+              <div className="text-2xl font-bold text-amber-400">{alliance.total_bases}</div>
+            </div>
+            <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
+              <div className="text-neutral-400 text-sm">Members</div>
+              <div className="text-2xl font-bold text-amber-400">
+                {alliance.member_count} / {alliance.max_members}
+              </div>
+            </div>
+            <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
+              <div className="text-neutral-400 text-sm">Created</div>
+              <div className="text-lg font-bold text-amber-400">
+                {new Date(alliance.created_at).toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-neutral-700">
+          <button
+            onClick={() => setActiveTab("members")}
+            className={`px-6 py-3 font-semibold transition-all ${
+              activeTab === "members"
+                ? "text-amber-400 border-b-2 border-amber-400"
+                : "text-neutral-400 hover:text-neutral-200"
+            }`}
+          >
+            <Users className="w-4 h-4 inline mr-2" />
+            Members
+          </button>
+          {canManage && (
+            <button
+              onClick={() => setActiveTab("requests")}
+              className={`px-6 py-3 font-semibold transition-all relative ${
+                activeTab === "requests"
+                  ? "text-amber-400 border-b-2 border-amber-400"
+                  : "text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              <UserPlus className="w-4 h-4 inline mr-2" />
+              Join Requests
+              {joinRequests.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {joinRequests.length}
+                </span>
+              )}
+            </button>
+          )}
+          {isLeader && (
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`px-6 py-3 font-semibold transition-all ${
+                activeTab === "settings"
+                  ? "text-amber-400 border-b-2 border-amber-400"
+                  : "text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              <Settings className="w-4 h-4 inline mr-2" />
+              Settings
+            </button>
+          )}
+        </div>
+
+        {/* Content */}
+        {activeTab === "members" && (
+          <div className="bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-neutral-900 border-b border-neutral-700">
+                <tr>
+                  <th className="text-left p-4 text-amber-400">Username</th>
+                  <th className="text-left p-4 text-amber-400">Role</th>
+                  <th className="text-left p-4 text-amber-400">Joined</th>
+                  {canManage && <th className="text-right p-4 text-amber-400">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((member) => (
+                  <tr key={member.id} className="border-b border-neutral-700 hover:bg-neutral-750">
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        {member.role === "leader" && <Crown className="w-4 h-4 text-amber-400" />}
+                        {member.role === "co-leader" && <Shield className="w-4 h-4 text-amber-400" />}
+                        <span className="font-semibold">{member.users.username}</span>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                          member.role === "leader"
+                            ? "bg-amber-500/20 text-amber-400"
+                            : member.role === "co-leader"
+                              ? "bg-blue-500/20 text-blue-400"
+                              : "bg-neutral-700 text-neutral-300"
+                        }`}
+                      >
+                        {member.role}
+                      </span>
+                    </td>
+                    <td className="p-4 text-neutral-400">{new Date(member.joined_at).toLocaleDateString()}</td>
+                    {canManage && (
+                      <td className="p-4 text-right">
+                        <div className="flex gap-2 justify-end">
+                          {isLeader && member.role === "member" && member.user_id !== currentUserId && (
+                            <button
+                              onClick={() => handlePromoteToCoLeader(member.user_id)}
+                              className="px-3 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded text-sm transition-all"
+                            >
+                              Promote to Co-Leader
+                            </button>
+                          )}
+                          {isLeader && member.role === "co-leader" && (
+                            <button
+                              onClick={() => handleDemoteFromCoLeader(member.user_id)}
+                              className="px-3 py-1 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-sm transition-all"
+                            >
+                              Demote to Member
+                            </button>
+                          )}
+                          {member.role !== "leader" && member.user_id !== currentUserId && (
+                            <button
+                              onClick={() => handleKickMember(member.user_id)}
+                              className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-sm transition-all"
+                            >
+                              <UserMinus className="w-4 h-4" />
+                            </button>
+                          )}
+                          {member.user_id === currentUserId && member.role !== "leader" && (
+                            <button
+                              onClick={handleLeaveAlliance}
+                              className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-sm transition-all"
+                            >
+                              Leave Alliance
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeTab === "requests" && canManage && (
+          <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6">
+            {joinRequests.length === 0 ? (
+              <div className="text-center text-neutral-400 py-8">No pending join requests</div>
+            ) : (
+              <div className="space-y-4">
+                {joinRequests.map((request) => (
+                  <div key={request.id} className="bg-neutral-900 border border-neutral-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-lg">{request.users.username}</div>
+                        {request.message && <div className="text-neutral-400 text-sm mt-1">{request.message}</div>}
+                        <div className="text-neutral-500 text-xs mt-2">
+                          {new Date(request.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApproveRequest(request.id, request.user_id)}
+                          className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded transition-all"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectRequest(request.id)}
+                          className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded transition-all"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "settings" && isLeader && (
+          <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-6">
+            <h2 className="text-2xl font-bold text-amber-400 mb-6">Alliance Settings</h2>
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-neutral-300 mb-2">Alliance Description</label>
+                <textarea
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded px-4 py-2 text-neutral-100 focus:border-amber-500 focus:outline-none"
+                  rows={4}
+                  defaultValue={alliance.description || ""}
+                  placeholder="Enter alliance description..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-neutral-300 mb-2">Minimum Points Required</label>
+                <input
+                  type="number"
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded px-4 py-2 text-neutral-100 focus:border-amber-500 focus:outline-none"
+                  defaultValue={alliance.min_points_required}
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="is_public"
+                  defaultChecked={alliance.is_public}
+                  className="w-5 h-5 accent-amber-500"
+                />
+                <label htmlFor="is_public" className="text-neutral-300">
+                  Public Alliance (anyone can join without approval)
+                </label>
+              </div>
+              <button className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded transition-all">
+                Save Settings
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
