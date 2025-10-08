@@ -23,6 +23,7 @@ export default function GameCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [gameState, setGameState] = useState<GameStateData>(initialState)
   const [showMapMenu, setShowMapMenu] = useState(false)
+  const grassTileRef = useRef<HTMLImageElement | null>(null)
 
   const keysRef = useRef<Set<string>>(new Set())
   const gameStateRef = useRef(gameState)
@@ -34,20 +35,17 @@ export default function GameCanvas({
   }, [gameState])
 
   useEffect(() => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.onload = () => {
+      console.log("[v0] Grass tile loaded successfully")
+      grassTileRef.current = img
     }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      onStateChange(gameState)
-    }, 2000)
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
+    img.onerror = () => {
+      console.error("[v0] Failed to load grass tile")
     }
-  }, [gameState, onStateChange])
+    img.src = "/images/grass-tile.png"
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -182,6 +180,42 @@ export default function GameCanvas({
         ctx.strokeStyle = "#666666"
         ctx.lineWidth = 0.5
         ctx.stroke()
+      }
+    }
+
+    if (grassTileRef.current) {
+      const grassTileSize = 8 // Each grass texture covers 8x8 tiles
+      const grassWidth = 512 * camera.zoom
+      const grassHeight = 256 * camera.zoom
+
+      // Calculate which 8x8 regions are visible
+      const grassStartX = Math.floor(startX / grassTileSize) * grassTileSize
+      const grassEndX = Math.ceil(endX / grassTileSize) * grassTileSize
+      const grassStartY = Math.floor(startY / grassTileSize) * grassTileSize
+      const grassEndY = Math.ceil(endY / grassTileSize) * grassTileSize
+
+      for (let gx = grassStartX; gx <= grassEndX; gx += grassTileSize) {
+        for (let gy = grassStartY; gy <= grassEndY; gy += grassTileSize) {
+          // Calculate center of 8x8 tile region in isometric coordinates
+          const centerX = gx + grassTileSize / 2
+          const centerY = gy + grassTileSize / 2
+
+          // Convert to screen coordinates
+          const isoX = (centerX - centerY) * (tileWidth / 2)
+          const isoY = (centerX + centerY) * (tileHeight / 2)
+
+          const screenX = isoX + camera.x + ctx.canvas.width / 2
+          const screenY = isoY + camera.y + ctx.canvas.height / 2
+
+          // Draw grass tile centered on this position
+          ctx.drawImage(
+            grassTileRef.current,
+            screenX - grassWidth / 2,
+            screenY - grassHeight / 2,
+            grassWidth,
+            grassHeight,
+          )
+        }
       }
     }
   }
