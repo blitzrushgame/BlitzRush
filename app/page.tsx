@@ -80,7 +80,7 @@ export default function HomePage() {
       {/* Main content */}
       <div className="relative z-10 text-center">
         <h1
-          className={`text-6xl font-bold text-white tracking-wider mb-8 transition-all duration-700 ${
+          className={`text-6xl font-bold text-white tracking-wider mb-8 transition-all duration-700 font-mono ${
             showLogin ? "-translate-y-32 opacity-0" : "translate-y-0 opacity-100"
           }`}
         >
@@ -94,7 +94,7 @@ export default function HomePage() {
         >
           <button
             onClick={handlePlayClick}
-            className="bg-amber-100/80 hover:bg-amber-200/90 text-amber-900 font-semibold py-4 px-12 text-xl border border-amber-300/60 hover:border-amber-400/80 backdrop-blur-sm transition-all duration-300"
+            className="bg-amber-100/80 hover:bg-amber-200/90 text-amber-900 font-semibold py-4 px-12 text-xl border border-amber-300/60 hover:border-amber-400/80 backdrop-blur-sm transition-all duration-300 font-mono"
           >
             PLAY
           </button>
@@ -105,9 +105,9 @@ export default function HomePage() {
             showLogin ? "opacity-100 -translate-y-8" : "opacity-0 translate-y-32 pointer-events-none"
           }`}
         >
-          <div className="bg-neutral-800/40 backdrop-blur-md border border-neutral-600/30 rounded-lg p-8 w-96 mx-auto">
+          <div className="bg-neutral-800/40 backdrop-blur-md border border-neutral-600/30 rounded-lg p-8 w-96 mx-auto opacity-85">
             <h2 className="text-2xl font-bold text-white mb-2">{isSignUp ? "Join the Ranks" : "Welcome Back"}</h2>
-            <p className="text-neutral-400 text-sm mb-6">
+            <p className="text-neutral-400 text-sm mb-6 font-mono shadow-none">
               {isSignUp ? "Create your commander account" : "Sign in to continue your campaign"}
             </p>
 

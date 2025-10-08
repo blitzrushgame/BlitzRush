@@ -160,9 +160,14 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(({ userId, userna
           if (Array.isArray(allianceData)) {
             setAllianceMessages(allianceData)
           }
+        } else if (allianceRes.status === 403) {
+          console.log("[v0] User no longer has access to alliance chat, clearing messages")
+          setAllianceMessages([])
         } else {
           console.error("Error fetching alliance messages:", allianceRes.status, allianceRes.statusText)
         }
+      } else {
+        setAllianceMessages([])
       }
     } catch (error) {
       console.error("Error fetching messages:", error)
