@@ -34,11 +34,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Alliance is full" }, { status: 400 })
   }
 
-  // Check if target user is already in an alliance
-  const { data: targetUser } = await supabase.from("users").select("alliance_id").eq("id", userId).single()
+  const { data: targetUser } = await supabase
+    .from("users")
+    .select("alliance_id, block_alliance_invites")
+    .eq("id", userId)
+    .single()
 
-  if (targetUser?.alliance_id) {
-    return NextResponse.json({ error: "User is already in an alliance" }, { status: 400 })
+  if (targetUser?.block_alliance_invites) {
+    return NextResponse.json({ error: "This user has blocked alliance invites" }, { status: 400 })
   }
 
   // Check if invite already exists

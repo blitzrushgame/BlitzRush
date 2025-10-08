@@ -144,13 +144,25 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(({ userId, userna
 
     try {
       const globalRes = await fetch("/api/chat/global")
-      const globalData = await globalRes.json()
-      setGlobalMessages(globalData)
+      if (globalRes.ok) {
+        const globalData = await globalRes.json()
+        if (Array.isArray(globalData)) {
+          setGlobalMessages(globalData)
+        }
+      } else {
+        console.error("Error fetching global messages:", globalRes.status, globalRes.statusText)
+      }
 
       if (allianceId) {
         const allianceRes = await fetch(`/api/chat/alliance?allianceId=${allianceId}&userId=${userId}`)
-        const allianceData = await allianceRes.json()
-        setAllianceMessages(allianceData)
+        if (allianceRes.ok) {
+          const allianceData = await allianceRes.json()
+          if (Array.isArray(allianceData)) {
+            setAllianceMessages(allianceData)
+          }
+        } else {
+          console.error("Error fetching alliance messages:", allianceRes.status, allianceRes.statusText)
+        }
       }
     } catch (error) {
       console.error("Error fetching messages:", error)
@@ -199,6 +211,8 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(({ userId, userna
     wasAtBottomRef.current.alliance = true
 
     try {
+      console.log("[v0] Sending alliance message - userId:", userId, "allianceId:", allianceId)
+
       const res = await fetch("/api/chat/alliance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -210,6 +224,8 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(({ userId, userna
         }),
       })
 
+      console.log("[v0] Alliance message response status:", res.status)
+
       if (res.status === 429) {
         const data = await res.json()
         alert(data.error)
@@ -217,14 +233,25 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(({ userId, userna
       }
 
       if (!res.ok) {
-        throw new Error("Failed to send message")
+        const errorText = await res.text()
+        console.error("[v0] Alliance message failed - status:", res.status, "response:", errorText)
+
+        try {
+          const errorData = JSON.parse(errorText)
+          alert(errorData.error || "Failed to send message")
+        } catch {
+          alert("Failed to send message: " + errorText)
+        }
+        return
       }
 
+      console.log("[v0] Alliance message sent successfully")
       setAllianceInput("")
       setAllianceCooldown(3)
       fetchMessages()
     } catch (error) {
-      console.error("Error sending message:", error)
+      console.error("[v0] Error sending alliance message:", error)
+      alert("Failed to send message. Please try again.")
     }
   }
 

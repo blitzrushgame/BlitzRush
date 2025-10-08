@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Trophy, Users, Target, Upload } from "lucide-react"
+import { Trophy, Users, Target, Upload, Shield } from "lucide-react"
 
 interface UserProfile {
   id: number
@@ -21,6 +21,7 @@ interface UserProfile {
   leaderboard_rank: number | null
   alliance_id: number | null
   alliance_name: string | null
+  block_alliance_invites: boolean
 }
 
 export default function ProfilePage() {
@@ -28,6 +29,7 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [bio, setBio] = useState("")
   const [profilePicture, setProfilePicture] = useState("")
+  const [blockAllianceInvites, setBlockAllianceInvites] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -54,6 +56,7 @@ export default function ProfilePage() {
       setProfile(profileData)
       setBio(profileData.bio || "")
       setProfilePicture(profileData.profile_picture || "")
+      setBlockAllianceInvites(profileData.block_alliance_invites || false)
     } catch (error) {
       console.error("Error loading profile:", error)
     } finally {
@@ -84,6 +87,30 @@ export default function ProfilePage() {
       alert("Failed to save profile. Please try again.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleToggleBlockInvites() {
+    if (!profile) return
+
+    const newValue = !blockAllianceInvites
+
+    try {
+      const res = await fetch("/api/profile/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          blockAllianceInvites: newValue,
+        }),
+      })
+
+      if (!res.ok) throw new Error("Failed to update settings")
+
+      setBlockAllianceInvites(newValue)
+      await loadProfile()
+    } catch (error) {
+      console.error("Error updating settings:", error)
+      alert("Failed to update settings. Please try again.")
     }
   }
 
@@ -305,6 +332,35 @@ export default function ProfilePage() {
                     ) : (
                       <p className="text-lg font-semibold text-neutral-200">No Alliance</p>
                     )}
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-neutral-700">
+                  <h3 className="text-amber-400 font-semibold mb-4 flex items-center gap-2">
+                    <Shield className="w-5 h-5" />
+                    Privacy Settings
+                  </h3>
+                  <div className="bg-neutral-900/50 p-4 rounded-lg border border-amber-500/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-neutral-200 font-medium">Block Alliance Invites</p>
+                        <p className="text-neutral-400 text-sm mt-1">
+                          Prevent other players from sending you alliance invitations
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleToggleBlockInvites}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          blockAllianceInvites ? "bg-amber-500" : "bg-neutral-600"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            blockAllianceInvites ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

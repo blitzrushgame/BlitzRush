@@ -6,7 +6,7 @@ export async function GET(request: Request, { params }: { params: { userId: stri
 
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, username, bio, profile_picture, points, leaderboard_rank, alliance_id")
+    .select("id, username, bio, profile_picture, points, leaderboard_rank, alliance_id, block_alliance_invites")
     .eq("id", params.userId)
     .single()
 

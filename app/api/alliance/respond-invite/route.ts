@@ -38,11 +38,13 @@ export async function POST(request: Request) {
   }
 
   // Accept invite
-  // Check if user is already in an alliance
   const { data: currentUser } = await supabase.from("users").select("alliance_id").eq("id", user.id).single()
 
   if (currentUser?.alliance_id) {
-    return NextResponse.json({ error: "You are already in an alliance" }, { status: 400 })
+    return NextResponse.json(
+      { error: "You must leave your current alliance before accepting this invite" },
+      { status: 400 },
+    )
   }
 
   // Check if alliance is full

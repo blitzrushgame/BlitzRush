@@ -498,7 +498,7 @@ export default function AllianceManagement({
 
             {searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && (
               <div className="text-center text-neutral-400 py-8">
-                No available players found. Players must not be in an alliance to receive invites.
+                No available players found. Players who have blocked invites will not appear in search results.
               </div>
             )}
 

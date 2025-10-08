@@ -29,10 +29,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Only leaders and co-leaders can invite members" }, { status: 403 })
   }
 
-  // Search for users by username (case-insensitive)
   const { data: users, error } = await supabase
     .from("users")
-    .select("id, username, points, alliance_id")
+    .select("id, username, points, alliance_id, block_alliance_invites")
     .ilike("username", `%${query}%`)
     .limit(10)
 
@@ -40,8 +39,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Filter out users already in an alliance
-  const availableUsers = users?.filter((u) => !u.alliance_id && u.id !== user.id) || []
+  const availableUsers = users?.filter((u) => u.id !== user.id && !u.block_alliance_invites) || []
 
   return NextResponse.json({ users: availableUsers })
 }
