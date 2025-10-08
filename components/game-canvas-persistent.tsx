@@ -93,7 +93,7 @@ export default function GameCanvas({
 
       if (deltaX !== 0 || deltaY !== 0) {
         setGameState((prev) => {
-          const worldSize = 300
+          const worldSize = 15
           const tileSize = 64
           const worldPixelSize = worldSize * tileSize
           const boundaryBuffer = 500
@@ -146,7 +146,7 @@ export default function GameCanvas({
     const tileWidth = tileSize
     const tileHeight = tileSize * 0.5
 
-    const worldSize = 300
+    const worldSize = 15
 
     const visibleTilesX = Math.ceil(ctx.canvas.width / tileWidth) + 2
     const visibleTilesY = Math.ceil(ctx.canvas.height / tileHeight) + 2
@@ -184,23 +184,37 @@ export default function GameCanvas({
     }
 
     if (grassTileRef.current) {
+      const grassTileSize = 8 // Each grass texture covers 8x8 tiles
       const grassWidth = 512 * camera.zoom
       const grassHeight = 256 * camera.zoom
 
-      const bufferTiles = 2
-      const tilesX = Math.ceil(ctx.canvas.width / grassWidth) + bufferTiles * 2
-      const tilesY = Math.ceil(ctx.canvas.height / grassHeight) + bufferTiles * 2
+      // Calculate which 8x8 regions are visible
+      const grassStartX = Math.floor(startX / grassTileSize) * grassTileSize
+      const grassEndX = Math.ceil(endX / grassTileSize) * grassTileSize
+      const grassStartY = Math.floor(startY / grassTileSize) * grassTileSize
+      const grassEndY = Math.ceil(endY / grassTileSize) * grassTileSize
 
-      const offsetX = ((camera.x % grassWidth) + grassWidth) % grassWidth
-      const offsetY = ((camera.y % grassHeight) + grassHeight) % grassHeight
-      const startScreenX = -grassWidth * bufferTiles + offsetX
-      const startScreenY = -grassHeight * bufferTiles + offsetY
+      for (let gx = grassStartX; gx <= grassEndX; gx += grassTileSize) {
+        for (let gy = grassStartY; gy <= grassEndY; gy += grassTileSize) {
+          // Calculate center of 8x8 tile region in isometric coordinates
+          const centerX = gx + grassTileSize / 2
+          const centerY = gy + grassTileSize / 2
 
-      for (let x = 0; x < tilesX; x++) {
-        for (let y = 0; y < tilesY; y++) {
-          const screenX = startScreenX + x * grassWidth
-          const screenY = startScreenY + y * grassHeight
-          ctx.drawImage(grassTileRef.current, screenX, screenY, grassWidth, grassHeight)
+          // Convert to screen coordinates
+          const isoX = (centerX - centerY) * (tileWidth / 2)
+          const isoY = (centerX + centerY) * (tileHeight / 2)
+
+          const screenX = isoX + camera.x + ctx.canvas.width / 2
+          const screenY = isoY + camera.y + ctx.canvas.height / 2
+
+          // Draw grass tile centered on this position
+          ctx.drawImage(
+            grassTileRef.current,
+            screenX - grassWidth / 2,
+            screenY - grassHeight / 2,
+            grassWidth,
+            grassHeight,
+          )
         }
       }
     }
@@ -245,7 +259,7 @@ export default function GameCanvas({
       const deltaY = y - gameState.dragStart.y
 
       setGameState((prev) => {
-        const worldSize = 300
+        const worldSize = 15
         const tileSize = 64
         const worldPixelSize = worldSize * tileSize
         const boundaryBuffer = 500
@@ -299,8 +313,10 @@ export default function GameCanvas({
   }
 
   const handleMapSelect = (mapId: number) => {
-    onMapChange(mapId)
+    // This will trigger the map change through the parent component
+    onMapChange(mapId) // Updated to directly change map instead of opening modal
     setShowMapMenu(false)
+    // The actual map switching logic is handled by the parent
   }
 
   const totalMaps = 10
@@ -325,6 +341,7 @@ export default function GameCanvas({
             transform: showMapMenu ? "translateY(0)" : "translateY(calc(-100% + 50px))",
           }}
         >
+          {/* Map selection panel */}
           <div
             className="bg-neutral-800/95 backdrop-blur-md border-x border-b border-neutral-600/30 shadow-2xl"
             style={{ width: "900px" }}
@@ -345,6 +362,7 @@ export default function GameCanvas({
                 </a>
               </div>
 
+              {/* Map grid */}
               <div className="grid grid-cols-10 gap-3">
                 {maps.map((mapId) => (
                   <button
@@ -377,6 +395,7 @@ export default function GameCanvas({
                 clipPath: "polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%)",
               }}
             >
+              {/* Yellow outline using pseudo-element */}
               <div
                 className="absolute inset-0 pointer-events-none"
                 style={{

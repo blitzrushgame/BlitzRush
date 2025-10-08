@@ -11,7 +11,7 @@ export default function SignUpSuccessPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-slate-400 text-center">
-              You've successfully enlisted in BLITZ RUSH. Check your email to confirm your account and begin your first
+              You're successfully enlisted in BLITZ RUSH. Check your email to confirm your account creation and begin your first
               campaign.
             </p>
           </CardContent>
