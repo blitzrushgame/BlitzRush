@@ -22,6 +22,7 @@ interface GameState {
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const grassTileRef = useRef<HTMLImageElement | null>(null)
   const [gameState, setGameState] = useState<GameState>({
     camera: { x: 0, y: 0, zoom: 2 },
     isDragging: false,
@@ -41,13 +42,24 @@ export default function GameCanvas() {
   }, [gameState])
 
   useEffect(() => {
+    const img = new Image()
+    img.src = "/images/grass-tile.png"
+    img.onload = () => {
+      console.log("[v0] Grass tile image loaded successfully")
+      grassTileRef.current = img
+    }
+    img.onerror = () => {
+      console.error("[v0] Failed to load grass tile image")
+    }
+  }, [])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    // Set canvas size
     const resizeCanvas = () => {
       canvas.width = window.innerWidth
       canvas.height = window.innerHeight
@@ -101,16 +113,76 @@ export default function GameCanvas() {
         })
       }
 
-      // Clear canvas with military grey background
       ctx.fillStyle = "#2a2a2a"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       const currentState = gameStateRef.current
+      const tileSize = 64 * currentState.camera.zoom
+      const tileWidth = tileSize
+      const tileHeight = tileSize * 0.5
+      const worldSize = 15
 
-      // Draw terrain tiles
-      drawIsometricTerrain(ctx, currentState.camera)
+      const visibleTilesX = Math.ceil(ctx.canvas.width / tileWidth) + 2
+      const visibleTilesY = Math.ceil(ctx.canvas.height / tileHeight) + 2
 
-      // Draw selection box
+      const startX = Math.max(-worldSize, Math.floor(-currentState.camera.x / tileWidth) - visibleTilesX / 2)
+      const endX = Math.min(worldSize, Math.ceil(-currentState.camera.x / tileWidth) + visibleTilesX / 2)
+      const startY = Math.max(-worldSize, Math.floor(-currentState.camera.y / tileHeight) - visibleTilesY / 2)
+      const endY = Math.min(worldSize, Math.ceil(-currentState.camera.y / tileHeight) + visibleTilesY / 2)
+
+      for (let x = startX; x <= endX; x++) {
+        for (let y = startY; y <= endY; y++) {
+          const isoX = (x - y) * (tileWidth / 2)
+          const isoY = (x + y) * (tileHeight / 2)
+
+          const screenX = isoX + currentState.camera.x + ctx.canvas.width / 2
+          const screenY = isoY + currentState.camera.y + ctx.canvas.height / 2
+
+          const terrainType = (x + y) % 3
+          let tileColor = "#4a4a4a"
+
+          if (terrainType === 0) tileColor = "#3a4a3a"
+          else if (terrainType === 1) tileColor = "#4a3a3a"
+          else tileColor = "#4a4a4a"
+
+          ctx.fillStyle = tileColor
+          ctx.beginPath()
+          ctx.moveTo(screenX, screenY)
+          ctx.lineTo(screenX + tileWidth / 2, screenY + tileHeight / 2)
+          ctx.lineTo(screenX, screenY + tileHeight)
+          ctx.lineTo(screenX - tileWidth / 2, screenY + tileHeight / 2)
+          ctx.closePath()
+          ctx.fill()
+
+          ctx.strokeStyle = "#666666"
+          ctx.lineWidth = 0.5
+          ctx.stroke()
+        }
+      }
+
+      if (grassTileRef.current) {
+        const grassTileWidth = 512 * currentState.camera.zoom
+        const grassTileHeight = 256 * currentState.camera.zoom
+
+        const tilesX = Math.ceil(ctx.canvas.width / grassTileWidth) + 2
+        const tilesY = Math.ceil(ctx.canvas.height / grassTileHeight) + 2
+
+        const offsetX = (currentState.camera.x % grassTileWidth) + ctx.canvas.width / 2
+        const offsetY = (currentState.camera.y % grassTileHeight) + ctx.canvas.height / 2
+
+        for (let x = -1; x < tilesX; x++) {
+          for (let y = -1; y < tilesY; y++) {
+            ctx.drawImage(
+              grassTileRef.current,
+              offsetX + x * grassTileWidth - grassTileWidth,
+              offsetY + y * grassTileHeight - grassTileHeight,
+              grassTileWidth,
+              grassTileHeight,
+            )
+          }
+        }
+      }
+
       if (currentState.selectionBox.start && currentState.selectionBox.end) {
         drawSelectionBox(ctx, currentState.selectionBox.start, currentState.selectionBox.end)
       }
@@ -128,59 +200,7 @@ export default function GameCanvas() {
         cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, []) // Remove gameState dependency to prevent multiple loops
-
-  const drawIsometricTerrain = (ctx: CanvasRenderingContext2D, camera: { x: number; y: number; zoom: number }) => {
-    const tileSize = 64 * camera.zoom
-    const tileWidth = tileSize
-    const tileHeight = tileSize * 0.5
-
-    const worldSize = 15
-
-    const centerX = ctx.canvas.width / 2 + camera.x
-    const centerY = ctx.canvas.height / 2 + camera.y
-
-    // Calculate visible tile range
-    const visibleTilesX = Math.ceil(ctx.canvas.width / tileWidth) + 2
-    const visibleTilesY = Math.ceil(ctx.canvas.height / tileHeight) + 2
-
-    const startX = Math.max(-worldSize, Math.floor(-camera.x / tileWidth) - visibleTilesX / 2)
-    const endX = Math.min(worldSize, Math.ceil(-camera.x / tileWidth) + visibleTilesX / 2)
-    const startY = Math.max(-worldSize, Math.floor(-camera.y / tileHeight) - visibleTilesY / 2)
-    const endY = Math.min(worldSize, Math.ceil(-camera.y / tileHeight) + visibleTilesY / 2)
-
-    for (let x = startX; x <= endX; x++) {
-      for (let y = startY; y <= endY; y++) {
-        const screenX = x * tileWidth + camera.x + ctx.canvas.width / 2
-        const screenY = y * tileHeight + camera.y + ctx.canvas.height / 2
-
-        // Create terrain variation based on position
-        const terrainType = (x + y) % 3
-        let tileColor = "#4a4a4a" // Default grey
-
-        if (terrainType === 0)
-          tileColor = "#3a4a3a" // Darker green-grey
-        else if (terrainType === 1)
-          tileColor = "#4a3a3a" // Brown-grey
-        else tileColor = "#4a4a4a" // Standard grey
-
-        // Draw isometric tile
-        ctx.fillStyle = tileColor
-        ctx.beginPath()
-        ctx.moveTo(screenX, screenY)
-        ctx.lineTo(screenX + tileWidth / 2, screenY + tileHeight / 2)
-        ctx.lineTo(screenX, screenY + tileHeight)
-        ctx.lineTo(screenX - tileWidth / 2, screenY + tileHeight / 2)
-        ctx.closePath()
-        ctx.fill()
-
-        // Add tile borders
-        ctx.strokeStyle = "#666666"
-        ctx.lineWidth = 0.5
-        ctx.stroke()
-      }
-    }
-  }
+  }, [])
 
   const handleMouseDown = (e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -196,7 +216,6 @@ export default function GameCanvas() {
         selectionBox: { start: { x, y }, end: { x, y } },
       }))
     } else if (e.button === 2) {
-      // Right click - camera drag
       setGameState((prev) => ({
         ...prev,
         isDragging: true,
@@ -213,13 +232,11 @@ export default function GameCanvas() {
     const y = e.clientY - rect.top
 
     if (gameState.isSelecting && gameState.selectionBox.start) {
-      // Update selection box
       setGameState((prev) => ({
         ...prev,
         selectionBox: { ...prev.selectionBox, end: { x, y } },
       }))
     } else if (gameState.isDragging && gameState.dragStart) {
-      // Update camera position
       const deltaX = x - gameState.dragStart.x
       const deltaY = y - gameState.dragStart.y
 
@@ -252,7 +269,7 @@ export default function GameCanvas() {
     if (gameState.isSelecting && gameState.selectionBox.start && gameState.selectionBox.end) {
       setGameState((prev) => ({
         ...prev,
-        selectedUnits: [], // No units to select
+        selectedUnits: [],
         isDragging: false,
         isSelecting: false,
         dragStart: null,
@@ -271,7 +288,6 @@ export default function GameCanvas() {
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
-    // Zoom functionality removed - camera stays at 2x
   }
 
   const drawSelectionBox = (
@@ -282,15 +298,13 @@ export default function GameCanvas() {
     const width = end.x - start.x
     const height = end.y - start.y
 
-    // Fill with semi-transparent background
     ctx.fillStyle = "rgba(0, 255, 0, 0.1)"
     ctx.fillRect(start.x, start.y, width, height)
 
-    // Draw animated border
     ctx.strokeStyle = "#00ff00"
     ctx.lineWidth = 2
     ctx.setLineDash([8, 4])
-    ctx.lineDashOffset = -(Date.now() / 50) % 12 // Animated dashes
+    ctx.lineDashOffset = -(Date.now() / 50) % 12
     ctx.strokeRect(start.x, start.y, width, height)
     ctx.setLineDash([])
   }
