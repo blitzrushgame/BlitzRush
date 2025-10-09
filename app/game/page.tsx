@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import GameCanvas from "@/components/game-canvas-persistent"
+import GameCanvas, { type GameCanvasRef } from "@/components/game-canvas-persistent"
 import { GameChat, type GameChatRef } from "@/components/game-chat"
 import type { GameStateData } from "@/lib/types/game"
 
@@ -17,6 +17,7 @@ export default function GamePage() {
   const [allianceId, setAllianceId] = useState<number | undefined>(undefined)
   const [currentMap, setCurrentMap] = useState<number>(1)
   const chatRef = useRef<GameChatRef>(null)
+  const canvasRef = useRef<GameCanvasRef | null>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -41,8 +42,32 @@ export default function GamePage() {
   }, [currentMap])
 
   useEffect(() => {
+    if (!userId) return
+
+    const refreshAllianceStatus = async () => {
+      try {
+        const userResponse = await fetch(`/api/user/${userId}`)
+
+        if (!userResponse.ok) {
+          return
+        }
+
+        const userData = await userResponse.json()
+
+        if (userData && !userData.error && userData.alliance_id !== allianceId) {
+          setAllianceId(userData.alliance_id)
+        }
+      } catch (error) {
+        console.error("[v0] Error refreshing alliance status:", error)
+      }
+    }
+
+    const interval = setInterval(refreshAllianceStatus, 30000)
+    return () => clearInterval(interval)
+  }, [userId, allianceId])
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only focus chat if Enter is pressed and no input/textarea is currently focused
       if (e.key === "Enter") {
         const activeElement = document.activeElement
         const isInputFocused = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
@@ -60,23 +85,41 @@ export default function GamePage() {
 
   const loadGameState = async (userId: number, mapId: number) => {
     try {
-      setLoadingProgress(20)
-      setLoadingText("Loading world data...")
+      setLoading(true)
+      setLoadingProgress(1)
+      setLoadingText("loading world")
+
+      const phase1Start = Date.now()
+      const phase1Duration = 40
+      const phase1Interval = setInterval(() => {
+        const elapsed = Date.now() - phase1Start
+        const progress = Math.min(elapsed / phase1Duration, 1)
+        setLoadingProgress(1 + progress * 10) // 1% to 11%
+        if (progress >= 1) clearInterval(phase1Interval)
+      }, 5)
+
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      setLoadingProgress(11)
+
+      setLoadingText("loading players")
+      await new Promise((resolve) => setTimeout(resolve, 70))
+
+      setLoadingProgress(42)
+      await new Promise((resolve) => setTimeout(resolve, 120))
+
+      setLoadingText("loading battlefield")
+      const phase4Start = Date.now()
+      const phase4Duration = 170
+      const phase4Interval = setInterval(() => {
+        const elapsed = Date.now() - phase4Start
+        const progress = Math.min(elapsed / phase4Duration, 1)
+        setLoadingProgress(42 + progress * 58) // 42% to 100%
+        if (progress >= 1) clearInterval(phase4Interval)
+      }, 5)
 
       const response = await fetch(`/api/game/state?userId=${userId}&mapId=${mapId}`)
 
       if (!response.ok) {
-        console.error("[v0] API returned error:", response.status)
-        let errorText = "Unknown error"
-        try {
-          const errorData = await response.json()
-          errorText = errorData.error || errorData.details || errorText
-        } catch (e) {
-          errorText = await response.text()
-        }
-        console.error("[v0] Error details:", errorText)
-
-        // Create default state on error
         const newState: GameStateData = {
           camera: { x: 0, y: 0, zoom: 2 },
           buildings: [],
@@ -94,9 +137,9 @@ export default function GamePage() {
           dragStart: null,
         }
         setGameState(newState)
+        await new Promise((resolve) => setTimeout(resolve, 170))
         setLoadingProgress(100)
-        setLoadingText("Battle ready!")
-        setTimeout(() => setLoading(false), 500)
+        setTimeout(() => setLoading(false), 100)
         return
       }
 
@@ -105,18 +148,14 @@ export default function GamePage() {
         data = await response.json()
       } catch (parseError) {
         console.error("[v0] Failed to parse response as JSON:", parseError)
-        const text = await response.text()
-        console.error("[v0] Response text:", text)
-        throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`)
+        throw new Error("Invalid JSON response")
       }
 
-      setLoadingProgress(60)
-      setLoadingText("Deploying units...")
-
+      let newState: GameStateData
       if (data.state) {
-        setGameState(data.state as GameStateData)
+        newState = data.state as GameStateData
       } else {
-        const newState: GameStateData = {
+        newState = {
           camera: { x: 0, y: 0, zoom: 2 },
           buildings: [],
           units: [],
@@ -132,15 +171,24 @@ export default function GamePage() {
           isSelecting: false,
           dragStart: null,
         }
-        setGameState(newState)
       }
 
+      const targetCoords = sessionStorage.getItem("targetCoordinates")
+      if (targetCoords) {
+        const { x, y } = JSON.parse(targetCoords)
+        newState.camera.x = x
+        newState.camera.y = y
+        sessionStorage.removeItem("targetCoordinates")
+      }
+
+      setGameState(newState)
+
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, 170 - (Date.now() - phase4Start))))
       setLoadingProgress(100)
-      setLoadingText("Battle ready!")
 
       setTimeout(() => {
         setLoading(false)
-      }, 500)
+      }, 100)
     } catch (error) {
       console.error("[v0] Error in loadGameState:", error)
       const newState: GameStateData = {
@@ -184,49 +232,112 @@ export default function GamePage() {
 
   const handleMapChange = (mapId: number) => {
     setCurrentMap(mapId)
-    setLoading(true)
   }
 
-  if (loading) {
-    return (
-      <div className="fixed inset-0 bg-gray-900 flex items-center justify-center">
-        <div className="w-full max-w-2xl px-8">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-amber-400 mb-2">BLITZ RUSH</h1>
-            <p className="text-green-400 text-lg">{loadingText}</p>
-          </div>
+  const handleSendCoordinateMessage = async (message: string) => {
+    if (!userId || !allianceId) {
+      return
+    }
 
-          <div className="relative h-4 bg-gray-800 rounded-full overflow-hidden border border-amber-600/50">
-            <div
-              className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-300 ease-out"
-              style={{ width: `${loadingProgress}%` }}
-            />
-          </div>
+    try {
+      const res = await fetch("/api/chat/alliance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          username,
+          allianceId,
+          message,
+        }),
+      })
 
-          <div className="mt-4 text-center text-amber-400 font-mono">{loadingProgress}%</div>
-        </div>
-      </div>
-    )
+      if (!res.ok) {
+        console.error("[v0] Failed to send coordinate message")
+      }
+    } catch (error) {
+      console.error("[v0] Error sending coordinate message:", error)
+    }
   }
 
-  if (!gameState) {
-    return (
-      <div className="fixed inset-0 bg-gray-900 flex items-center justify-center">
-        <div className="text-red-400">Failed to load game state</div>
-      </div>
-    )
+  const handleCoordinateClick = (mapId: number, x: number, y: number) => {
+    const worldSize = 300
+    const tileSize = 64
+    const worldPixelSize = worldSize * tileSize
+    const displayRange = 2000
+
+    const worldX = worldPixelSize - (x / displayRange) * (worldPixelSize * 2)
+    const worldY = worldPixelSize - (y / displayRange) * (worldPixelSize * 2)
+
+    if (mapId === currentMap) {
+      if (canvasRef.current) {
+        canvasRef.current.updateCamera(worldX, worldY)
+      }
+    } else {
+      sessionStorage.setItem("targetCoordinates", JSON.stringify({ x: worldX, y: worldY }))
+      setCurrentMap(mapId)
+    }
   }
 
   return (
-    <>
-      <GameCanvas
-        initialState={gameState}
-        onStateChange={saveGameState}
-        worldId={currentMap.toString()}
-        onMapChange={handleMapChange}
-        currentMap={currentMap}
-      />
-      {userId && <GameChat ref={chatRef} userId={userId} username={username} allianceId={allianceId} />}
-    </>
+    <div className="relative w-full h-screen">
+      {gameState && (
+        <GameCanvas
+          ref={canvasRef}
+          initialState={gameState}
+          onStateChange={saveGameState}
+          worldId={currentMap.toString()}
+          onMapChange={handleMapChange}
+          currentMap={currentMap}
+          onSendCoordinateMessage={handleSendCoordinateMessage}
+        />
+      )}
+
+      {userId && (
+        <GameChat
+          ref={chatRef}
+          userId={userId}
+          username={username}
+          allianceId={allianceId}
+          onCoordinateClick={handleCoordinateClick}
+        />
+      )}
+
+      {loading && (
+        <div className="fixed inset-0 bg-neutral-900 flex items-center justify-center z-50 transition-opacity duration-500">
+          <div className="w-full max-w-2xl px-8">
+            <div className="text-center mb-12">
+              <h1 className="text-6xl font-bold text-amber-400 mb-3 tracking-wider drop-shadow-[0_0_20px_rgba(251,191,36,0.5)]">
+                BLITZ RUSH
+              </h1>
+              <div className="h-1 w-48 mx-auto bg-gradient-to-r from-transparent via-amber-500 to-transparent mb-4" />
+              <p className="text-amber-400/80 text-xl font-semibold tracking-wide uppercase">{loadingText}</p>
+            </div>
+
+            <div className="relative">
+              <div className="h-6 bg-neutral-800 rounded-lg overflow-hidden border-2 border-amber-500/30 shadow-lg">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 transition-all duration-100 ease-linear relative"
+                  style={{ width: `${loadingProgress}%` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
+                </div>
+              </div>
+
+              <div className="mt-4 text-center">
+                <span className="text-3xl font-bold text-amber-400 font-mono drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]">
+                  {Math.round(loadingProgress)}%
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-center gap-2">
+              <div className="w-3 h-3 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <div className="w-3 h-3 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <div className="w-3 h-3 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

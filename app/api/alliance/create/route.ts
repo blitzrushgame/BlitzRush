@@ -76,5 +76,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: memberError.message }, { status: 500 })
   }
 
+  await supabase.from("users").update({ alliance_id: alliance.id }).eq("id", user.id)
+
   return NextResponse.json({ success: true, allianceId: alliance.id })
 }
