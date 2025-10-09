@@ -9,15 +9,11 @@ export async function GET(request: NextRequest) {
   const userId = userIdParam ? Number.parseInt(userIdParam, 10) : null
   const mapId = mapIdParam ? Number.parseInt(mapIdParam, 10) : null
 
-  console.log("[v0] GET request - userId:", userId, "mapId:", mapId)
-
   if (!userId || !mapId || isNaN(userId) || isNaN(mapId)) {
     return NextResponse.json({ error: "Missing or invalid parameters" }, { status: 400 })
   }
 
   try {
-    console.log("[v0] Querying database for user_game_states...")
-
     const supabase = createServiceRoleClient()
     const { data, error } = await supabase
       .from("user_game_states")
@@ -32,11 +28,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (data) {
-      console.log("[v0] Game data found, type:", typeof data.game_data)
       return NextResponse.json({ state: data.game_data })
     }
 
-    console.log("[v0] No game state found, returning null")
     return NextResponse.json({ state: null })
   } catch (error) {
     console.error("[v0] Error loading game state:", error)
@@ -69,8 +63,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing or invalid parameters" }, { status: 400 })
     }
 
-    console.log("[v0] Saving game state for userId:", userId, "mapId:", mapId)
-
     const supabase = createServiceRoleClient()
     const { error } = await supabase.from("user_game_states").upsert(
       {
@@ -89,7 +81,6 @@ export async function POST(request: NextRequest) {
       throw error
     }
 
-    console.log("[v0] Game state saved successfully")
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[v0] Error saving game state:", error)

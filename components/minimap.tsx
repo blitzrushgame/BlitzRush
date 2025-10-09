@@ -63,7 +63,7 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
 
     // Draw viewport rectangle
     ctx.strokeStyle = "#00ff00"
-    ctx.lineWidth = 2
+    ctx.lineWidth = 1 // Reduced line width from 2 to 1 to make the viewport box thinner
     ctx.strokeRect(viewportX, viewportY, viewportW, viewportH)
 
     // Draw viewport fill

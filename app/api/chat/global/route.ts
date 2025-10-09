@@ -2,11 +2,8 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export async function GET(request: Request) {
-  console.log("[v0] GET /api/chat/global - Starting request")
-
   try {
     const supabase = createServiceRoleClient()
-    console.log("[v0] Supabase client created")
 
     // Fetch messages with basic user data
     const { data: messages, error: messagesError } = await supabase
@@ -15,29 +12,23 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
       .limit(20)
 
-    console.log("[v0] Messages fetched:", messages?.length || 0, "Error:", messagesError?.message || "none")
-
     if (messagesError) {
       console.error("[v0] Supabase error fetching messages:", messagesError)
       return NextResponse.json({ error: messagesError.message }, { status: 500 })
     }
 
     if (!messages || messages.length === 0) {
-      console.log("[v0] No messages found, returning empty array")
       return NextResponse.json([])
     }
 
     // Get unique user IDs
     const userIds = [...new Set(messages.map((msg: any) => msg.user_id))]
-    console.log("[v0] Unique user IDs:", userIds)
 
     // Fetch user data with alliance info
     const { data: users, error: usersError } = await supabase
       .from("users")
       .select("id, alliance_id, profile_picture")
       .in("id", userIds)
-
-    console.log("[v0] Users fetched:", users?.length || 0, "Error:", usersError?.message || "none")
 
     if (usersError) {
       console.error("[v0] Error fetching users:", usersError)
@@ -46,16 +37,12 @@ export async function GET(request: Request) {
     // Fetch alliance data for users with alliances
     const allianceIds = users?.filter((u: any) => u.alliance_id).map((u: any) => u.alliance_id) || []
 
-    console.log("[v0] Alliance IDs to fetch:", allianceIds)
-
     let alliances: any[] = []
     if (allianceIds.length > 0) {
       const { data: allianceData, error: alliancesError } = await supabase
         .from("alliances")
         .select("id, tag")
         .in("id", allianceIds)
-
-      console.log("[v0] Alliances fetched:", allianceData?.length || 0, "Error:", alliancesError?.message || "none")
 
       if (alliancesError) {
         console.error("[v0] Error fetching alliances:", alliancesError)
@@ -67,8 +54,6 @@ export async function GET(request: Request) {
     // Create lookup maps
     const userMap = new Map(users?.map((u: any) => [u.id, u]) || [])
     const allianceMap = new Map(alliances.map((a: any) => [a.id, a]))
-
-    console.log("[v0] Creating enriched messages")
 
     // Enrich messages with user and alliance data
     const messagesWithTags = messages.reverse().map((msg: any) => {
@@ -86,7 +71,6 @@ export async function GET(request: Request) {
       }
     })
 
-    console.log("[v0] Returning", messagesWithTags.length, "enriched messages")
     return NextResponse.json(messagesWithTags)
   } catch (error: any) {
     console.error("[v0] Unexpected error in GET /api/chat/global:", error)

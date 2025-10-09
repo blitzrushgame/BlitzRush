@@ -90,7 +90,7 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
 
     useEffect(() => {
       fetchMessages()
-      const interval = setInterval(fetchMessages, 3000)
+      const interval = setInterval(fetchMessages, 5000)
       return () => clearInterval(interval)
     }, [allianceId])
 
@@ -152,8 +152,10 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
           if (Array.isArray(globalData)) {
             setGlobalMessages(globalData)
           }
+        } else if (globalRes.status === 429) {
+          console.log("[v0] Rate limited on global chat, will retry in next interval")
         } else {
-          console.error("Error fetching global messages:", globalRes.status, globalRes.statusText)
+          console.error("[v0] Error fetching global messages:", globalRes.status)
         }
 
         if (allianceId) {
@@ -166,14 +168,16 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
           } else if (allianceRes.status === 403) {
             console.log("[v0] User no longer has access to alliance chat, clearing messages")
             setAllianceMessages([])
+          } else if (allianceRes.status === 429) {
+            console.log("[v0] Rate limited on alliance chat, will retry in next interval")
           } else {
-            console.error("Error fetching alliance messages:", allianceRes.status, allianceRes.statusText)
+            console.error("[v0] Error fetching alliance messages:", allianceRes.status)
           }
         } else {
           setAllianceMessages([])
         }
       } catch (error) {
-        console.error("Error fetching messages:", error)
+        console.error("[v0] Error fetching messages:", error instanceof Error ? error.message : error)
       }
     }
 
@@ -494,7 +498,7 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
 
                   <div className="border-t border-neutral-700 pt-4">
                     <h3 className="text-amber-400 font-semibold mb-2 flex items-center gap-2">
-                      <Target className="w-4 h-4" />
+                      <Target className="w-4 h-4 text-amber-400" />
                       Biography
                     </h3>
                     <p className="text-neutral-300 text-sm">
