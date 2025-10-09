@@ -145,7 +145,7 @@ export default function GameCanvas({
     ctx.save()
 
     // This creates a pseudo-3D effect where the top of the screen appears farther away
-    const perspectiveStrength = 0.1 // Adjust this value (0-1) for more/less perspective
+    const perspectiveStrength = 0.7 // Adjust this value (0-1) for more/less perspective
     const centerY = ctx.canvas.height / 2
 
     // Apply a perspective transformation matrix
