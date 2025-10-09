@@ -142,23 +142,6 @@ export default function GameCanvas({
   }, [])
 
   const drawIsometricTerrain = (ctx: CanvasRenderingContext2D, camera: { x: number; y: number; zoom: number }) => {
-    ctx.save()
-
-    // This creates a pseudo-3D effect where the top of the screen appears farther away
-    const perspectiveStrength = 0.7 // Adjust this value (0-1) for more/less perspective
-    const centerY = ctx.canvas.height / 2
-
-    // Apply a perspective transformation matrix
-    // This skews the canvas to create depth perception
-    ctx.setTransform(
-      1,
-      0, // Horizontal scaling and skewing
-      0,
-      1 - perspectiveStrength, // Vertical scaling (compress towards horizon)
-      0,
-      centerY * perspectiveStrength, // Vertical translation offset
-    )
-
     const tileSize = 64 * camera.zoom
     const tileWidth = tileSize
     const tileHeight = tileSize * 0.5
@@ -166,44 +149,13 @@ export default function GameCanvas({
     const worldSize = 300
 
     const visibleTilesX = Math.ceil(ctx.canvas.width / tileWidth) + 2
-    const visibleTilesY = Math.ceil(ctx.canvas.height / tileHeight) + 4 // Increased for perspective view
+    const visibleTilesY = Math.ceil(ctx.canvas.height / tileHeight) + 2
 
     const startX = Math.max(-worldSize, Math.floor(-camera.x / tileWidth) - visibleTilesX / 2)
     const endX = Math.min(worldSize, Math.ceil(-camera.x / tileWidth) + visibleTilesX / 2)
     const startY = Math.max(-worldSize, Math.floor(-camera.y / tileHeight) - visibleTilesY / 2)
     const endY = Math.min(worldSize, Math.ceil(-camera.y / tileHeight) + visibleTilesY / 2)
 
-    if (grassTileRef.current) {
-      const grassWidth = 512 * camera.zoom
-      const grassHeight = 512 * camera.zoom // Made square for better tiling with perspective
-
-      const bufferTiles = 3 // Increased buffer for perspective view
-      const tilesX = Math.ceil(ctx.canvas.width / grassWidth) + bufferTiles * 2
-      const tilesY = Math.ceil(ctx.canvas.height / (1 - perspectiveStrength) / grassHeight) + bufferTiles * 2
-
-      const offsetX = ((camera.x % grassWidth) + grassWidth) % grassWidth
-      const offsetY = ((camera.y % grassHeight) + grassHeight) % grassHeight
-      const startScreenX = -grassWidth * bufferTiles + offsetX
-      const startScreenY = -grassHeight * bufferTiles + offsetY
-
-      for (let y = 0; y < tilesY; y++) {
-        for (let x = 0; x < tilesX; x++) {
-          const screenX = startScreenX + x * grassWidth
-          const screenY = startScreenY + y * grassHeight
-
-          // Calculate distance-based opacity (farther = slightly darker)
-          const distanceFactor = Math.max(0.7, 1 - (y / tilesY) * 0.3)
-          ctx.globalAlpha = distanceFactor
-
-          ctx.drawImage(grassTileRef.current, screenX, screenY, grassWidth, grassHeight)
-        }
-      }
-
-      ctx.globalAlpha = 1.0 // Reset alpha
-    }
-
-    // If you want to keep the diamond tiles, uncomment the code below:
-    /*
     for (let x = startX; x <= endX; x++) {
       for (let y = startY; y <= endY; y++) {
         const screenX = x * tileWidth + camera.x + ctx.canvas.width / 2
@@ -230,9 +182,28 @@ export default function GameCanvas({
         ctx.stroke()
       }
     }
-    */
 
-    ctx.restore()
+    if (grassTileRef.current) {
+      const grassWidth = 512 * camera.zoom
+      const grassHeight = 256 * camera.zoom
+
+      const bufferTiles = 2
+      const tilesX = Math.ceil(ctx.canvas.width / grassWidth) + bufferTiles * 2
+      const tilesY = Math.ceil(ctx.canvas.height / grassHeight) + bufferTiles * 2
+
+      const offsetX = ((camera.x % grassWidth) + grassWidth) % grassWidth
+      const offsetY = ((camera.y % grassHeight) + grassHeight) % grassHeight
+      const startScreenX = -grassWidth * bufferTiles + offsetX
+      const startScreenY = -grassHeight * bufferTiles + offsetY
+
+      for (let x = 0; x < tilesX; x++) {
+        for (let y = 0; y < tilesY; y++) {
+          const screenX = startScreenX + x * grassWidth
+          const screenY = startScreenY + y * grassHeight
+          ctx.drawImage(grassTileRef.current, screenX, screenY, grassWidth, grassHeight)
+        }
+      }
+    }
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
