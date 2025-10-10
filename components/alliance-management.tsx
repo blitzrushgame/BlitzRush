@@ -71,7 +71,7 @@ export default function AllianceManagement({
   currentUserId,
   joinRequests,
 }: AllianceManagementProps) {
-  const [activeTab, setActiveTab] = useState<"news" | "members" | "requests" | "invite" | "settings">("news")
+  const [activeTab, setActiveTab] = useState<"news" | "members" | "requests" | "invite" | "settings">("members")
   const [newsletter, setNewsletter] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
@@ -348,17 +348,6 @@ export default function AllianceManagement({
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-neutral-700">
           <button
-            onClick={() => setActiveTab("news")}
-            className={`px-6 py-3 font-semibold transition-all ${
-              activeTab === "news"
-                ? "text-amber-400 border-b-2 border-amber-400"
-                : "text-neutral-400 hover:text-neutral-200"
-            }`}
-          >
-            <Newspaper className="w-4 h-4 inline mr-2" />
-            News
-          </button>
-          <button
             onClick={() => setActiveTab("members")}
             className={`px-6 py-3 font-semibold transition-all ${
               activeTab === "members"
@@ -368,6 +357,17 @@ export default function AllianceManagement({
           >
             <Users className="w-4 h-4 inline mr-2" />
             Members
+          </button>
+          <button
+            onClick={() => setActiveTab("news")}
+            className={`px-6 py-3 font-semibold transition-all ${
+              activeTab === "news"
+                ? "text-amber-400 border-b-2 border-amber-400"
+                : "text-neutral-400 hover:text-neutral-200"
+            }`}
+          >
+            <Newspaper className="w-4 h-4 inline mr-2" />
+            News
           </button>
           {canManage && (
             <>

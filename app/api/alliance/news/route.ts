@@ -1,18 +1,15 @@
-import { createServerClient } from "@/lib/supabase-server"
-import { cookies } from "next/headers"
+import { getCurrentUser } from "@/lib/auth/simple-auth"
+import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
-  const supabase = await createServerClient()
-  const cookieStore = await cookies()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  const supabase = createServiceRoleClient()
 
   // Get user's alliance
   const { data: userData } = await supabase.from("users").select("alliance_id").eq("id", user.id).single()
@@ -36,16 +33,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createServerClient()
-  const cookieStore = await cookies()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  const supabase = createServiceRoleClient()
 
   const { title, content } = await request.json()
 
@@ -53,14 +47,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Title and content are required" }, { status: 400 })
   }
 
-  // Get user's alliance and role
-  const { data: memberData } = await supabase
+  const { data: memberData, error: memberError } = await supabase
     .from("alliance_members")
-    .select("alliance_id, role, users(username)")
+    .select("alliance_id, role")
     .eq("user_id", user.id)
     .single()
 
-  if (!memberData) {
+  if (memberError || !memberData) {
     return NextResponse.json({ error: "Not in an alliance" }, { status: 400 })
   }
 
@@ -69,11 +62,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Only leaders and co-leaders can post news" }, { status: 403 })
   }
 
+  // Fetch username separately
+  const { data: userData, error: userError } = await supabase
+    .from("users")
+    .select("username")
+    .eq("id", user.id)
+    .single()
+
+  if (!userData) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 })
+  }
+
   // Create news post
   const { error } = await supabase.from("alliance_news").insert({
     alliance_id: memberData.alliance_id,
     author_id: user.id,
-    author_username: memberData.users.username,
+    author_username: userData.username,
     title,
     content,
   })
