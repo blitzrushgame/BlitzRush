@@ -23,9 +23,14 @@ interface Alliance {
 interface AllianceLeaderboardProps {
   alliances: Alliance[]
   currentUserId: number
+  isInAlliance?: boolean // Added prop to track if user is in an alliance
 }
 
-export default function AllianceLeaderboard({ alliances, currentUserId }: AllianceLeaderboardProps) {
+export default function AllianceLeaderboard({
+  alliances,
+  currentUserId,
+  isInAlliance = false,
+}: AllianceLeaderboardProps) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [allianceName, setAllianceName] = useState("")
   const [allianceTag, setAllianceTag] = useState("")
@@ -112,20 +117,22 @@ export default function AllianceLeaderboard({ alliances, currentUserId }: Allian
               <p className="text-neutral-400 mt-1">Join or create an alliance to compete with others</p>
             </div>
           </div>
-          <div className="flex gap-4">
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded transition-all shadow-lg shadow-amber-500/20"
-            >
-              Create Alliance
-            </button>
-            <a
-              href="/game"
-              className="px-6 py-3 bg-neutral-700 hover:bg-neutral-600 border border-amber-500/30 rounded text-amber-400 transition-all"
-            >
-              Back to Game
-            </a>
-          </div>
+          {!isInAlliance && (
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded transition-all shadow-lg shadow-amber-500/20"
+              >
+                Create Alliance
+              </button>
+              <a
+                href="/game"
+                className="px-6 py-3 bg-neutral-700 hover:bg-neutral-600 border border-amber-500/30 rounded text-amber-400 transition-all"
+              >
+                Back to Game
+              </a>
+            </div>
+          )}
         </div>
 
         {pendingInvites.length > 0 && (
@@ -187,13 +194,13 @@ export default function AllianceLeaderboard({ alliances, currentUserId }: Allian
                 <th className="text-right p-4 text-amber-400">Points</th>
                 <th className="text-right p-4 text-amber-400">Bases</th>
                 <th className="text-right p-4 text-amber-400">Members</th>
-                <th className="text-right p-4 text-amber-400">Actions</th>
+                {!isInAlliance && <th className="text-right p-4 text-amber-400">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {alliances.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-neutral-400">
+                  <td colSpan={isInAlliance ? 6 : 7} className="p-8 text-center text-neutral-400">
                     No alliances yet. Be the first to create one!
                   </td>
                 </tr>
@@ -232,18 +239,20 @@ export default function AllianceLeaderboard({ alliances, currentUserId }: Allian
                         </span>
                       </div>
                     </td>
-                    <td className="p-4 text-right">
-                      {alliance.member_count < alliance.max_members ? (
-                        <button
-                          onClick={() => handleJoinAlliance(alliance.id)}
-                          className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded transition-all"
-                        >
-                          {alliance.is_public ? "Join" : "Request to Join"}
-                        </button>
-                      ) : (
-                        <span className="text-neutral-500 text-sm">Full</span>
-                      )}
-                    </td>
+                    {!isInAlliance && (
+                      <td className="p-4 text-right">
+                        {alliance.member_count < alliance.max_members ? (
+                          <button
+                            onClick={() => handleJoinAlliance(alliance.id)}
+                            className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded transition-all"
+                          >
+                            {alliance.is_public ? "Join" : "Request to Join"}
+                          </button>
+                        ) : (
+                          <span className="text-neutral-500 text-sm">Full</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
