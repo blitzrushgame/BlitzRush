@@ -8,12 +8,15 @@ export async function middleware(request: NextRequest) {
 
   const { data: banned } = await supabase
     .from("banned_ips")
-    .select("id")
+    .select("id, reason")
     .eq("ip_address", ip)
     .single();
 
   if (banned) {
     const redirectUrl = new URL("/banned", request.url);
+    if (banned.reason) {
+      redirectUrl.searchParams.set("reason", banned.reason);
+    }
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -22,7 +25,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    
     "/((?!_next/static|_next/image|favicon.ico|banned|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
