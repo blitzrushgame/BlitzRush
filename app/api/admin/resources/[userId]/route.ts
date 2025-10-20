@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
+import { requireAdminAuth } from "@/lib/admin/auth"
 
 export async function GET(request: Request, { params }: { params: Promise<{ userId: string }> }) {
-  const cookieStore = await cookies()
-  const isAdminAuthenticated = cookieStore.get("admin_authenticated")?.value === "true"
-
-  if (!isAdminAuthenticated) {
+  const authResult = await requireAdminAuth()
+  if (!authResult.authenticated || !authResult.admin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
