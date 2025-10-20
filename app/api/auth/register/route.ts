@@ -24,12 +24,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Username already taken" }, { status: 400 })
   }
 
+  const forwarded = request.headers.get("x-forwarded-for")
+  const realIp = request.headers.get("x-real-ip")
+  const ip = forwarded ? forwarded.split(",")[0].trim() : realIp || "unknown"
+
+  console.log("[v0] Creating user record in database with IP:", ip)
+
   console.log("[v0] Creating user record in database")
   const { error } = await supabase.from("users").insert({
     username: username,
     email: email,
     password: "supabase_auth", // Mark as using Supabase Auth
-    ip_address: `user_${Date.now()}_${Math.random().toString(36).substring(7)}`, // Unique placeholder
+    ip_address: ip, // Use actual IP address
   })
 
   if (error) {
