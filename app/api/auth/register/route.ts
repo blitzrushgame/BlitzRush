@@ -2,9 +2,9 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export async function POST(request: Request) {
-  const { username, email } = await request.json()
+  const { auth_user_id, username, email } = await request.json()
 
-  console.log("[v0] Register API called for username:", username, "email:", email)
+  console.log("[v0] Register API called for username:", username, "email:", email, "auth_user_id:", auth_user_id)
 
   const supabase = createServiceRoleClient()
 
@@ -33,8 +33,9 @@ export async function POST(request: Request) {
   const insertData = {
     username: username,
     email: email,
-    password: "supabase_auth",
     ip_address: ip,
+    // Store a placeholder password since we're using Supabase Auth
+    password: "supabase_auth",
   }
 
   console.log("[v0] Insert data:", JSON.stringify(insertData))
@@ -43,24 +44,20 @@ export async function POST(request: Request) {
 
   if (error) {
     console.error("[v0] Error creating user - Full error object:", JSON.stringify(error, null, 2))
-    console.error("[v0] Error code:", error.code)
-    console.error("[v0] Error message:", error.message)
-    console.error("[v0] Error details:", error.details)
-    console.error("[v0] Error hint:", error.hint)
 
     if (error.code === "23505") {
-      return NextResponse.json({ error: "Username already taken" }, { status: 400 })
+      return NextResponse.json({ error: "Username or email already taken" }, { status: 400 })
     }
 
     return NextResponse.json(
       {
         error: "Database error saving new user",
-        details: error.message, // Include error message for debugging
+        details: error.message,
       },
       { status: 500 },
     )
   }
 
   console.log("[v0] User created successfully:", username, "Data:", JSON.stringify(insertedData))
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, user: insertedData })
 }
