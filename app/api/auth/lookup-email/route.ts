@@ -21,7 +21,13 @@ export async function POST(request: Request) {
 
   if (!data.email) {
     console.log("[v0] User found but no email:", username)
-    return NextResponse.json({ error: "User account is incomplete. Please contact support." }, { status: 404 })
+    return NextResponse.json(
+      {
+        error:
+          "This account was created before email support. Please run the migration script 008_add_emails_to_legacy_users.sql to fix this.",
+      },
+      { status: 404 },
+    )
   }
 
   console.log("[v0] Email found for username:", username)
