@@ -31,6 +31,7 @@ export async function POST(request: Request) {
   console.log("[v0] Creating user record in database with IP:", ip)
 
   const insertData = {
+    auth_user_id: auth_user_id,
     username: username,
     email: email,
     ip_address: ip,

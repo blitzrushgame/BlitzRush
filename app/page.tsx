@@ -66,9 +66,10 @@ export default function HomePage() {
     setError("")
     setSuccessMessage("")
 
+    console.log("[v0] Starting sign up process for username:", username)
+
     const supabase = createClient()
 
-    // Create Supabase Auth account
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -80,35 +81,45 @@ export default function HomePage() {
       },
     })
 
+    console.log("[v0] Supabase Auth response:", { authData, signUpError })
+
     if (signUpError) {
+      console.error("[v0] Supabase Auth error:", signUpError)
       setError(signUpError.message)
       setLoading(false)
       return
     }
 
     if (!authData.user) {
+      console.error("[v0] No user returned from Supabase Auth")
       setError("Failed to create account")
       setLoading(false)
       return
     }
 
-    // Store username in database
+    console.log("[v0] Auth user created with ID:", authData.user.id)
+
     const registerRes = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        auth_user_id: authData.user.id,
         username: username,
         email: email,
       }),
     })
 
+    console.log("[v0] Register API response status:", registerRes.status)
+
     if (!registerRes.ok) {
-      const { error: registerError } = await registerRes.json()
-      setError(registerError || "Failed to register username")
+      const responseData = await registerRes.json()
+      console.error("[v0] Register API error:", responseData)
+      setError(responseData.error || "Failed to register username")
       setLoading(false)
       return
     }
 
+    console.log("[v0] Registration successful!")
     setSuccessMessage("Account created! Please check your email to verify your account before logging in.")
     setIsSignUp(false)
     setUsernameOrEmail("")
