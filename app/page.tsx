@@ -4,7 +4,6 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 
 export default function HomePage() {
   const router = useRouter()
@@ -29,35 +28,20 @@ export default function HomePage() {
     setError("")
     setSuccessMessage("")
 
-    const supabase = createClient()
-
-    // Look up email from username
-    const lookupRes = await fetch("/api/auth/lookup-email", {
+    const loginRes = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: usernameOrEmail }),
+      body: JSON.stringify({ username: usernameOrEmail, password }),
     })
 
-    if (!lookupRes.ok) {
-      setError("Username not found")
+    if (!loginRes.ok) {
+      const data = await loginRes.json()
+      setError(data.error || "Login failed")
       setLoading(false)
       return
     }
 
-    const { email: userEmail } = await lookupRes.json()
-
-    // Authenticate with Supabase using the email
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: userEmail,
-      password,
-    })
-
-    if (signInError) {
-      setError(signInError.message)
-      setLoading(false)
-    } else {
-      router.push("/game")
-    }
+    router.push("/game")
   }
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -66,63 +50,26 @@ export default function HomePage() {
     setError("")
     setSuccessMessage("")
 
-    console.log("[v0] Starting sign up process for username:", username)
-
-    const supabase = createClient()
-
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/game`,
-        data: {
-          username: username,
-        },
-      },
-    })
-
-    console.log("[v0] Supabase Auth response:", { authData, signUpError })
-
-    if (signUpError) {
-      console.error("[v0] Supabase Auth error:", signUpError)
-      setError(signUpError.message)
-      setLoading(false)
-      return
-    }
-
-    if (!authData.user) {
-      console.error("[v0] No user returned from Supabase Auth")
-      setError("Failed to create account")
-      setLoading(false)
-      return
-    }
-
-    console.log("[v0] Auth user created with ID:", authData.user.id)
-
     const registerRes = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        auth_user_id: authData.user.id,
         username: username,
         email: email,
+        password: password,
       }),
     })
 
-    console.log("[v0] Register API response status:", registerRes.status)
-
     if (!registerRes.ok) {
       const responseData = await registerRes.json()
-      console.error("[v0] Register API error:", responseData)
-      setError(responseData.error || "Failed to register username")
+      setError(responseData.error || "Failed to register")
       setLoading(false)
       return
     }
 
-    console.log("[v0] Registration successful!")
-    setSuccessMessage("Account created! Please check your email to verify your account before logging in.")
+    setSuccessMessage("Account created! You can now log in.")
     setIsSignUp(false)
-    setUsernameOrEmail("")
+    setUsernameOrEmail(username)
     setPassword("")
     setUsername("")
     setEmail("")

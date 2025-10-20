@@ -1,20 +1,26 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { cookies } from "next/headers"
+import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export async function getCurrentUser() {
-  const supabase = await createClient()
+  const cookieStore = await cookies()
+  const sessionCookie = cookieStore.get("user_session")
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (!sessionCookie) {
     return null
   }
 
-  // Get the user profile from the custom users table
-  const { data: profile } = await supabase.from("users").select("*").eq("auth_user_id", user.id).maybeSingle()
+  try {
+    const session = JSON.parse(sessionCookie.value)
 
-  return profile
+    // Get the user profile from the database
+    const supabase = createServiceRoleClient()
+    const { data: profile } = await supabase.from("users").select("*").eq("id", session.userId).maybeSingle()
+
+    return profile
+  } catch (error) {
+    console.error("[v0] Error getting current user:", error)
+    return null
+  }
 }

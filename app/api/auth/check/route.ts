@@ -1,24 +1,38 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { cookies } from "next/headers"
+import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export async function GET() {
-  const supabase = await createClient()
+  const cookieStore = await cookies()
+  const sessionCookie = cookieStore.get("user_session")
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  if (!sessionCookie) {
+    return NextResponse.json({ authenticated: false })
+  }
 
-  if (user) {
-    // Get the user profile from custom users table
-    const { data: profile } = await supabase.from("users").select("id, username").eq("auth_user_id", user.id).single()
+  try {
+    const session = JSON.parse(sessionCookie.value)
+
+    // Verify user still exists in database
+    const supabase = createServiceRoleClient()
+    const { data: user } = await supabase
+      .from("users")
+      .select("id, username, email")
+      .eq("id", session.userId)
+      .maybeSingle()
+
+    if (!user) {
+      return NextResponse.json({ authenticated: false })
+    }
 
     return NextResponse.json({
       authenticated: true,
-      userId: profile?.id,
-      username: profile?.username,
+      userId: user.id,
+      username: user.username,
       email: user.email,
     })
+  } catch (error) {
+    console.error("[v0] Error parsing session:", error)
+    return NextResponse.json({ authenticated: false })
   }
-
-  return NextResponse.json({ authenticated: false })
 }

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
+import bcrypt from "bcryptjs"
 
 export async function POST(request: Request) {
-  const { auth_user_id, username, email } = await request.json()
+  const { username, email, password } = await request.json()
 
-  console.log("[v0] Register API called for username:", username, "email:", email, "auth_user_id:", auth_user_id)
+  console.log("[v0] Register API called for username:", username, "email:", email)
 
   const supabase = createServiceRoleClient()
 
@@ -28,23 +29,23 @@ export async function POST(request: Request) {
   const realIp = request.headers.get("x-real-ip")
   const ip = forwarded ? forwarded.split(",")[0].trim() : realIp || "unknown"
 
-  console.log("[v0] Creating user record in database with IP:", ip)
+  console.log("[v0] Creating user record with IP:", ip)
+
+  const hashedPassword = await bcrypt.hash(password, 10)
 
   const insertData = {
-    auth_user_id: auth_user_id,
     username: username,
     email: email,
+    password: hashedPassword,
     ip_address: ip,
-    // Store a placeholder password since we're using Supabase Auth
-    password: "supabase_auth",
   }
 
-  console.log("[v0] Insert data:", JSON.stringify(insertData))
+  console.log("[v0] Inserting user into database")
 
   const { data: insertedData, error } = await supabase.from("users").insert(insertData).select()
 
   if (error) {
-    console.error("[v0] Error creating user - Full error object:", JSON.stringify(error, null, 2))
+    console.error("[v0] Error creating user:", JSON.stringify(error, null, 2))
 
     if (error.code === "23505") {
       return NextResponse.json({ error: "Username or email already taken" }, { status: 400 })
@@ -59,6 +60,6 @@ export async function POST(request: Request) {
     )
   }
 
-  console.log("[v0] User created successfully:", username, "Data:", JSON.stringify(insertedData))
+  console.log("[v0] User created successfully:", username)
   return NextResponse.json({ success: true, user: insertedData })
 }
