@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Shield } from "lucide-react"
@@ -12,7 +11,6 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,10 +30,7 @@ export default function AdminLoginPage() {
 
       if (response.ok) {
         console.log("[v0] Login successful, redirecting to /admin")
-        // Add a small delay to ensure cookie is set
-        await new Promise((resolve) => setTimeout(resolve, 100))
-        router.push("/admin")
-        router.refresh()
+        window.location.href = "/admin"
       } else {
         setError(data.error || "Invalid credentials or unauthorized IP")
       }

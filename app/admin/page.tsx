@@ -5,11 +5,16 @@ import { Button } from "@/components/ui/button"
 import { LogOut, Shield } from "lucide-react"
 
 export default async function AdminPage() {
+  console.log("[v0] Admin page rendering...")
   const session = await getAdminSession()
+  console.log("[v0] Admin page session check:", session ? "authenticated" : "not authenticated")
 
   if (!session) {
+    console.log("[v0] No session, redirecting to login")
     redirect("/admin/login")
   }
+
+  console.log("[v0] Admin page rendering dashboard for:", session.email)
 
   return (
     <div className="min-h-screen bg-neutral-950 p-8">
