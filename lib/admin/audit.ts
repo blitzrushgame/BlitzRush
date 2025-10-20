@@ -1,7 +1,7 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export interface AuditLogEntry {
-  admin_id: number
+  admin_id: number | null // Made admin_id nullable for logging attempts before admin exists
   admin_email: string
   action: string
   resource_type?: string

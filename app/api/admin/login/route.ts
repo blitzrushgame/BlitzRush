@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       console.log("[v0] Admin login attempt from non-whitelisted IP:", ip)
 
       await logAdminAction({
-        admin_id: 0,
+        admin_id: null,
         admin_email: "unknown",
         action: "login_attempt",
         ip_address: ip,
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       console.log("[v0] Invalid admin credentials for:", email)
 
       await logAdminAction({
-        admin_id: 0,
+        admin_id: null,
         admin_email: email,
         action: "login_failed",
         ip_address: ip,
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     console.error("[v0] Admin login error:", error)
 
     await logAdminAction({
-      admin_id: 0,
+      admin_id: null,
       admin_email: "unknown",
       action: "login_error",
       ip_address: ip,
