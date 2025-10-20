@@ -28,8 +28,8 @@ export async function POST(request: Request) {
   const { error } = await supabase.from("users").insert({
     username: username,
     email: email,
-    password: "supabase_auth", // Placeholder to satisfy NOT NULL constraint
-    ip_address: "0.0.0.0", // Placeholder to satisfy NOT NULL constraint
+    password: "supabase_auth", // Mark as using Supabase Auth
+    ip_address: `user_${Date.now()}_${Math.random().toString(36).substring(7)}`, // Unique placeholder
   })
 
   if (error) {
