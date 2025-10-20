@@ -45,14 +45,32 @@ export function isIPWhitelisted(ip: string): boolean {
  * Get client IP address from request headers
  */
 export function getClientIP(request: Request): string {
+  // Try multiple headers in order of preference
   const forwarded = request.headers.get("x-forwarded-for")
   const realIP = request.headers.get("x-real-ip")
+  const cfConnectingIP = request.headers.get("cf-connecting-ip") // Cloudflare
+  const trueClientIP = request.headers.get("true-client-ip") // Cloudflare Enterprise
+  const xClientIP = request.headers.get("x-client-ip")
+
+  console.log("[v0] IP Headers:", {
+    forwarded,
+    realIP,
+    cfConnectingIP,
+    trueClientIP,
+    xClientIP,
+  })
 
   if (forwarded) {
     return forwarded.split(",")[0].trim()
   }
 
-  return realIP || "unknown"
+  if (realIP) return realIP
+  if (cfConnectingIP) return cfConnectingIP
+  if (trueClientIP) return trueClientIP
+  if (xClientIP) return xClientIP
+
+  // In development/preview, allow "unknown" to pass if no whitelist is set
+  return "unknown"
 }
 
 /**
