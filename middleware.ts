@@ -13,7 +13,8 @@ export async function middleware(request: NextRequest) {
     .single();
 
   if (banned) {
-    return new NextResponse("Your IP is banned.", { status: 403 });
+    const redirectUrl = new URL("/banned", request.url);
+    return NextResponse.redirect(redirectUrl);
   }
 
   return NextResponse.next();
@@ -22,6 +23,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     
-    "/((?!_next/static|_next/image|favicon.ico|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|banned|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
