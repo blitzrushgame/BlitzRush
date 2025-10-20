@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
-    if (admin.whitelisted_ips && admin.whitelisted_ips.length > 0) {
+    if (admin.whitelisted_ips && admin.whitelisted_ips.length > 0 && ip !== "unknown") {
       if (!admin.whitelisted_ips.includes(ip)) {
         console.log("[v0] Admin IP not in personal whitelist:", ip)
 
