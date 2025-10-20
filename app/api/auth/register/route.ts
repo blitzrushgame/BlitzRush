@@ -30,24 +30,37 @@ export async function POST(request: Request) {
 
   console.log("[v0] Creating user record in database with IP:", ip)
 
-  console.log("[v0] Creating user record in database")
-  const { error } = await supabase.from("users").insert({
+  const insertData = {
     username: username,
     email: email,
-    password: "supabase_auth", // Mark as using Supabase Auth
-    ip_address: ip, // Use actual IP address
-  })
+    password: "supabase_auth",
+    ip_address: ip,
+  }
+
+  console.log("[v0] Insert data:", JSON.stringify(insertData))
+
+  const { data: insertedData, error } = await supabase.from("users").insert(insertData).select()
 
   if (error) {
-    console.error("[v0] Error creating user:", error)
+    console.error("[v0] Error creating user - Full error object:", JSON.stringify(error, null, 2))
+    console.error("[v0] Error code:", error.code)
+    console.error("[v0] Error message:", error.message)
+    console.error("[v0] Error details:", error.details)
+    console.error("[v0] Error hint:", error.hint)
 
     if (error.code === "23505") {
       return NextResponse.json({ error: "Username already taken" }, { status: 400 })
     }
 
-    return NextResponse.json({ error: "Database error saving new user" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Database error saving new user",
+        details: error.message, // Include error message for debugging
+      },
+      { status: 500 },
+    )
   }
 
-  console.log("[v0] User created successfully:", username)
+  console.log("[v0] User created successfully:", username, "Data:", JSON.stringify(insertedData))
   return NextResponse.json({ success: true })
 }
