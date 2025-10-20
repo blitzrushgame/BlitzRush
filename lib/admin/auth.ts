@@ -100,14 +100,19 @@ export async function verifyAdminCredentials(email: string, password: string): P
     return null
   }
 
-  console.log("[v0] Password verification debug:", {
-    email,
-    passwordLength: password.length,
-    hashLength: admin.password_hash?.length || 0,
-    hashPrefix: admin.password_hash?.substring(0, 10) || "none",
-  })
+  // WARNING: This is insecure and should only be used in development!
+  // Check if password_hash looks like plaintext (doesn't start with $2a$ or $2b$)
+  const isPlaintext = admin.password_hash && !admin.password_hash.startsWith("$2")
 
-  const isValidPassword = await bcrypt.compare(password, admin.password_hash)
+  let isValidPassword = false
+
+  if (isPlaintext) {
+    console.log("[v0] WARNING: Using plaintext password comparison (INSECURE!)")
+    isValidPassword = password === admin.password_hash
+  } else {
+    console.log("[v0] Using bcrypt password comparison")
+    isValidPassword = await bcrypt.compare(password, admin.password_hash)
+  }
 
   console.log("[v0] Password comparison result:", isValidPassword)
 
