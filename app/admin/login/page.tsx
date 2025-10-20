@@ -54,7 +54,7 @@ export default function AdminLoginPage() {
           <div>
             <Input
               type="email"
-              placeholder="Admin Email"
+              placeholder="Username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="bg-neutral-900/50 border-neutral-600/30 text-neutral-100"
