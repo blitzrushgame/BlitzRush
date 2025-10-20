@@ -47,6 +47,16 @@ ALTER TABLE alliances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alliance_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alliance_join_requests ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies before creating them
+DROP POLICY IF EXISTS "Anyone can view alliances" ON alliances;
+DROP POLICY IF EXISTS "Leaders can update their alliance" ON alliances;
+DROP POLICY IF EXISTS "Anyone can create an alliance" ON alliances;
+DROP POLICY IF EXISTS "Members can view alliance members" ON alliance_members;
+DROP POLICY IF EXISTS "Leaders and co-leaders can manage members" ON alliance_members;
+DROP POLICY IF EXISTS "Users can create join requests" ON alliance_join_requests;
+DROP POLICY IF EXISTS "Users can view their own requests" ON alliance_join_requests;
+DROP POLICY IF EXISTS "Leaders can manage join requests" ON alliance_join_requests;
+
 -- Alliances: Everyone can read, only members can see full details
 CREATE POLICY "Anyone can view alliances" ON alliances FOR SELECT USING (true);
 CREATE POLICY "Leaders can update their alliance" ON alliances FOR UPDATE USING (leader_id = (SELECT id FROM users WHERE username = current_user));

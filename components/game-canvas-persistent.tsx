@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react"
+import { useRouter } from "next/navigation"
 import type { GameStateData } from "@/lib/types/game"
 import { ChevronDown } from "lucide-react"
 import Minimap from "./minimap"
@@ -36,7 +37,12 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     const [showMapMenu, setShowMapMenu] = useState(false)
     const grassTileRef = useRef<HTMLImageElement | null>(null)
     const burnMarkRefs = useRef<(HTMLImageElement | null)[]>([null, null, null, null])
+    const homeBaseRef = useRef<HTMLImageElement | null>(null)
     const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 })
+    const [userId, setUserId] = useState<number | null>(null)
+    const [username, setUsername] = useState<string>("Player")
+    const [allianceId, setAllianceId] = useState<number | null>(null)
+    const router = useRouter()
 
     const keysRef = useRef<Set<string>>(new Set())
     const gameStateRef = useRef(gameState)
@@ -106,7 +112,41 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         }
         burnImg.src = path
       })
+
+      const homeBaseImg = new Image()
+      homeBaseImg.crossOrigin = "anonymous"
+      homeBaseImg.onload = () => {
+        console.log("[v0] Home base loaded successfully")
+        homeBaseRef.current = homeBaseImg
+      }
+      homeBaseImg.onerror = () => {
+        console.error("[v0] Failed to load home base")
+      }
+      homeBaseImg.src = "/images/base/army-wars-base.png"
     }, [])
+
+    useEffect(() => {
+      const checkAuth = async () => {
+        const response = await fetch("/api/auth/check")
+        const data = await response.json()
+
+        if (!data.authenticated) {
+          router.push("/")
+          return
+        }
+
+        setUserId(Number(data.userId))
+        localStorage.setItem("userId", data.userId.toString())
+        const userResponse = await fetch(`/api/user/${data.userId}`)
+        const userData = await userResponse.json()
+        setUsername(userData.username || "Player")
+        setAllianceId(userData.alliance_id)
+
+        await loadGameState(Number(data.userId), currentMap)
+      }
+
+      checkAuth()
+    }, [currentMap])
 
     useEffect(() => {
       const canvas = canvasRef.current
@@ -286,6 +326,71 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
         ctx.filter = "none"
       }
+
+      if (homeBaseRef.current && userId) {
+        const fetchHomeBase = async () => {
+          try {
+            const response = await fetch(`/api/game/home-base/status?userId=${userId}`)
+            if (response.ok) {
+              const data = await response.json()
+              if (data.homeBase && data.homeBase.world_id === currentMap) {
+                const baseWorldX = data.homeBase.x
+                const baseWorldY = data.homeBase.y
+                const baseWidth = 800 * camera.zoom
+                const baseHeight = 600 * camera.zoom
+
+                const screenX = baseWorldX + camera.x + ctx.canvas.width / 2 - baseWidth / 2
+                const screenY = baseWorldY + camera.y + ctx.canvas.height / 2 - baseHeight / 2
+
+                ctx.drawImage(homeBaseRef.current!, screenX, screenY, baseWidth, baseHeight)
+
+                // Draw placeholder factories inside the base
+                const factories = [
+                  { x: -180, y: -120, color: "#ff4444", label: "Steel" },
+                  { x: 40, y: -140, color: "#4444ff", label: "Carbon" },
+                  { x: 140, y: 60, color: "#44ff44", label: "Concrete" },
+                  { x: -20, y: 120, color: "#ffaa00", label: "Fuel" },
+                ]
+
+                factories.forEach((factory) => {
+                  const factoryWorldX = baseWorldX + factory.x * camera.zoom
+                  const factoryWorldY = baseWorldY + factory.y * camera.zoom
+                  const factoryScreenX = factoryWorldX + camera.x + ctx.canvas.width / 2
+                  const factoryScreenY = factoryWorldY + camera.y + ctx.canvas.height / 2
+                  const factorySize = 60 * camera.zoom
+
+                  ctx.fillStyle = factory.color
+                  ctx.fillRect(
+                    factoryScreenX - factorySize / 2,
+                    factoryScreenY - factorySize / 2,
+                    factorySize,
+                    factorySize,
+                  )
+
+                  ctx.strokeStyle = "#ffffff"
+                  ctx.lineWidth = 2
+                  ctx.strokeRect(
+                    factoryScreenX - factorySize / 2,
+                    factoryScreenY - factorySize / 2,
+                    factorySize,
+                    factorySize,
+                  )
+
+                  ctx.fillStyle = "#ffffff"
+                  ctx.font = `${12 * camera.zoom}px Arial`
+                  ctx.textAlign = "center"
+                  ctx.textBaseline = "middle"
+                  ctx.fillText(factory.label, factoryScreenX, factoryScreenY)
+                })
+              }
+            }
+          } catch (error) {
+            console.error("[v0] Error fetching home base for rendering:", error)
+          }
+        }
+
+        fetchHomeBase()
+      }
     }
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -407,6 +512,10 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     const totalMaps = 10
     const maps = Array.from({ length: totalMaps }, (_, i) => i + 1)
 
+    const loadGameState = async (userId: number, mapId: number) => {
+      // Placeholder for loadGameState logic
+    }
+
     return (
       <div className="relative w-full h-screen bg-gray-900 overflow-hidden">
         <canvas
@@ -425,6 +534,9 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
           canvasHeight={canvasDimensions.height}
           currentMap={currentMap}
           onCameraMove={handleCameraMove}
+          userId={userId}
+          username={username}
+          allianceId={allianceId}
         />
 
         <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 pointer-events-none">

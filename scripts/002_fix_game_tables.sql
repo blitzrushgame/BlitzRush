@@ -1,23 +1,6 @@
--- Drop the old table with the wrong foreign key reference
-DROP TABLE IF EXISTS user_game_states;
+-- This script is incompatible with the current database schema
+-- It references "simple_users" table which doesn't exist
+-- The database uses a "users" table instead
+-- This script should not be run - it's kept for reference only
 
--- Recreate user_game_states table without foreign key constraint
--- (since we're using simple_users table from a different script)
-CREATE TABLE IF NOT EXISTS user_game_states (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  world_id INTEGER NOT NULL,
-  game_data JSONB NOT NULL,
-  last_played TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(user_id, world_id)
-);
-
--- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_user_game_states_user_id ON user_game_states(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_game_states_world_id ON user_game_states(world_id);
-CREATE INDEX IF NOT EXISTS idx_user_game_states_last_played ON user_game_states(last_played);
-
--- Insert a test user if it doesn't exist
-INSERT INTO simple_users (id, username, password_hash)
-VALUES (1, 'testuser', 'test')
-ON CONFLICT (id) DO NOTHING;
+-- If you need to modify user_game_states, create a new script that references the correct "users" table

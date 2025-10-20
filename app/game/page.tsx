@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import GameCanvas, { type GameCanvasRef } from "@/components/game-canvas-persistent"
 import { GameChat, type GameChatRef } from "@/components/game-chat"
 import type { GameStateData } from "@/lib/types/game"
+import { useGameRealtime } from "@/hooks/use-game-realtime"
 
 export default function GamePage() {
   const router = useRouter()
@@ -18,6 +19,26 @@ export default function GamePage() {
   const [currentMap, setCurrentMap] = useState<number>(1)
   const chatRef = useRef<GameChatRef>(null)
   const canvasRef = useRef<GameCanvasRef | null>(null)
+
+  useGameRealtime({
+    worldId: currentMap,
+    userId: userId || 0,
+    onUnitsUpdate: (payload) => {
+      console.log("[v0] Real-time units update received:", payload)
+    },
+    onBuildingsUpdate: (payload) => {
+      console.log("[v0] Real-time buildings update received:", payload)
+    },
+    onResourcesUpdate: (payload) => {
+      console.log("[v0] Real-time resources update received:", payload)
+    },
+    onCombatLog: (payload) => {
+      console.log("[v0] Real-time combat log received:", payload)
+    },
+    onGameStateUpdate: (payload) => {
+      console.log("[v0] Real-time game state update from other player:", payload)
+    },
+  })
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -94,7 +115,7 @@ export default function GamePage() {
       const phase1Interval = setInterval(() => {
         const elapsed = Date.now() - phase1Start
         const progress = Math.min(elapsed / phase1Duration, 1)
-        setLoadingProgress(1 + progress * 10) // 1% to 11%
+        setLoadingProgress(1 + progress * 10)
         if (progress >= 1) clearInterval(phase1Interval)
       }, 5)
 
@@ -113,7 +134,7 @@ export default function GamePage() {
       const phase4Interval = setInterval(() => {
         const elapsed = Date.now() - phase4Start
         const progress = Math.min(elapsed / phase4Duration, 1)
-        setLoadingProgress(42 + progress * 58) // 42% to 100%
+        setLoadingProgress(42 + progress * 58)
         if (progress >= 1) clearInterval(phase4Interval)
       }, 5)
 
@@ -171,6 +192,25 @@ export default function GamePage() {
           isSelecting: false,
           dragStart: null,
         }
+      }
+
+      console.log("[v0] Initializing home base for user:", userId)
+      const initResponse = await fetch("/api/game/home-base/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, username }),
+      })
+
+      if (initResponse.ok) {
+        const initData = await initResponse.json()
+        if (initData.homeBase) {
+          console.log("[v0] Home base ready at:", initData.homeBase.x, initData.homeBase.y)
+          // Center camera on home base
+          newState.camera.x = initData.homeBase.x
+          newState.camera.y = initData.homeBase.y
+        }
+      } else {
+        console.error("[v0] Failed to initialize home base")
       }
 
       const targetCoords = sessionStorage.getItem("targetCoordinates")

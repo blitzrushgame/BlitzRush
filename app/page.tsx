@@ -4,41 +4,56 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { signup, login } from "@/lib/auth/simple-auth"
+import { createClient } from "@/lib/supabase/client"
 
 export default function HomePage() {
   const router = useRouter()
   const [showLogin, setShowLogin] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
-  const [username, setUsername] = useState("")
+  const [usernameOrEmail, setUsernameOrEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
 
   const handlePlayClick = () => {
     setShowLogin(true)
     setIsSignUp(false)
   }
 
-  const getUserIP = async () => {
-    try {
-      const response = await fetch("https://api.ipify.org?format=json")
-      const data = await response.json()
-      return data.ip
-    } catch {
-      return "unknown"
-    }
-  }
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
+    setSuccessMessage("")
 
-    const result = await login(username, password)
+    const supabase = createClient()
 
-    if (!result.success) {
-      setError(result.error || "Login failed")
+    // Look up email from username
+    const lookupRes = await fetch("/api/auth/lookup-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: usernameOrEmail }),
+    })
+
+    if (!lookupRes.ok) {
+      setError("Username not found")
+      setLoading(false)
+      return
+    }
+
+    const { email: userEmail } = await lookupRes.json()
+
+    // Authenticate with Supabase using the email
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: userEmail,
+      password,
+    })
+
+    if (signInError) {
+      setError(signInError.message)
       setLoading(false)
     } else {
       router.push("/game")
@@ -49,20 +64,58 @@ export default function HomePage() {
     e.preventDefault()
     setLoading(true)
     setError("")
+    setSuccessMessage("")
 
-    const ipAddress = await getUserIP()
-    const result = await signup(username, password, ipAddress)
+    const supabase = createClient()
 
-    if (!result.success) {
-      setError(result.error || "Signup failed")
+    // Create Supabase Auth account
+    const { data: authData, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/game`,
+        data: {
+          username: username,
+        },
+      },
+    })
+
+    if (signUpError) {
+      setError(signUpError.message)
       setLoading(false)
-    } else {
-      setIsSignUp(false)
-      setPassword("")
-      setError("")
-      setLoading(false)
-      alert("Account created successfully! Please login.")
+      return
     }
+
+    if (!authData.user) {
+      setError("Failed to create account")
+      setLoading(false)
+      return
+    }
+
+    // Store username in database
+    const registerRes = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: username,
+        email: email,
+      }),
+    })
+
+    if (!registerRes.ok) {
+      const { error: registerError } = await registerRes.json()
+      setError(registerError || "Failed to register username")
+      setLoading(false)
+      return
+    }
+
+    setSuccessMessage("Account created! Please check your email to verify your account before logging in.")
+    setIsSignUp(false)
+    setUsernameOrEmail("")
+    setPassword("")
+    setUsername("")
+    setEmail("")
+    setLoading(false)
   }
 
   return (
@@ -112,31 +165,74 @@ export default function HomePage() {
             </p>
 
             <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-neutral-300 text-sm font-medium mb-2">Username</label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                  placeholder="Commander"
-                  required
-                />
-              </div>
+              {isSignUp ? (
+                <>
+                  <div>
+                    <label className="block text-neutral-300 text-sm font-medium mb-2">Username</label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      placeholder="commander"
+                      required
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-neutral-300 text-sm font-medium mb-2">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
+                  <div>
+                    <label className="block text-neutral-300 text-sm font-medium mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      placeholder="commander@blitzrush.com"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-300 text-sm font-medium mb-2">Password</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      placeholder="••••••••"
+                      required
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-neutral-300 text-sm font-medium mb-2">Username</label>
+                    <input
+                      type="text"
+                      value={usernameOrEmail}
+                      onChange={(e) => setUsernameOrEmail(e.target.value)}
+                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      placeholder="commander"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-neutral-300 text-sm font-medium mb-2">Password</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      placeholder="••••••••"
+                      required
+                    />
+                  </div>
+                </>
+              )}
 
               {error && <p className="text-red-400 text-sm">{error}</p>}
+              {successMessage && <p className="text-green-400 text-sm">{successMessage}</p>}
 
               <button
                 type="submit"
@@ -152,6 +248,7 @@ export default function HomePage() {
                   onClick={() => {
                     setIsSignUp(!isSignUp)
                     setError("")
+                    setSuccessMessage("")
                   }}
                   className="text-amber-400 hover:text-amber-300 transition-colors"
                 >

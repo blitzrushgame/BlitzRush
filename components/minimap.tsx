@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 interface MinimapProps {
   camera: { x: number; y: number; zoom: number }
@@ -13,11 +13,38 @@ interface MinimapProps {
 
 export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap, onCameraMove }: MinimapProps) {
   const minimapRef = useRef<HTMLCanvasElement>(null)
+  const [homeBaseLocation, setHomeBaseLocation] = useState<{ x: number; y: number } | null>(null)
 
   const worldSize = 300
   const tileSize = 64
   const worldPixelSize = worldSize * tileSize
   const minimapSize = 250
+
+  useEffect(() => {
+    const fetchHomeBase = async () => {
+      try {
+        const userIdStr = localStorage.getItem("userId")
+        if (!userIdStr) return
+
+        const response = await fetch(`/api/game/home-base/status?userId=${userIdStr}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.homeBase && data.homeBase.world_id === currentMap) {
+            console.log("[v0] Home base location for minimap:", data.homeBase.x, data.homeBase.y)
+            setHomeBaseLocation({ x: data.homeBase.x, y: data.homeBase.y })
+          } else {
+            setHomeBaseLocation(null)
+          }
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching home base for minimap:", error)
+      }
+    }
+
+    fetchHomeBase()
+    const interval = setInterval(fetchHomeBase, 5000)
+    return () => clearInterval(interval)
+  }, [currentMap])
 
   useEffect(() => {
     const canvas = minimapRef.current
@@ -26,26 +53,30 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    // Clear canvas
     ctx.fillStyle = "#000000"
     ctx.fillRect(0, 0, minimapSize, minimapSize)
 
     // Scale factor to fit world into minimap
     const scale = minimapSize / (worldPixelSize * 2)
 
-    // Draw grid pattern
-    ctx.strokeStyle = "#333333"
-    ctx.lineWidth = 0.5
-    const gridSize = 10
-    for (let i = 0; i <= minimapSize; i += gridSize) {
-      ctx.beginPath()
-      ctx.moveTo(i, 0)
-      ctx.lineTo(i, minimapSize)
-      ctx.stroke()
+    if (homeBaseLocation) {
+      const minimapCenterX = minimapSize / 2
+      const minimapCenterY = minimapSize / 2
 
+      const homeBaseMinimapX = minimapCenterX - homeBaseLocation.x * scale
+      const homeBaseMinimapY = minimapCenterY - homeBaseLocation.y * scale
+
+      console.log("[v0] Drawing home base at minimap coords:", homeBaseMinimapX, homeBaseMinimapY)
+
+      // Draw green circle for home base (larger and brighter)
+      ctx.fillStyle = "#00ff00"
       ctx.beginPath()
-      ctx.moveTo(0, i)
-      ctx.lineTo(minimapSize, i)
+      ctx.arc(homeBaseMinimapX, homeBaseMinimapY, 6, 0, Math.PI * 2)
+      ctx.fill()
+
+      // Draw white outline for better visibility
+      ctx.strokeStyle = "#ffffff"
+      ctx.lineWidth = 2
       ctx.stroke()
     }
 
@@ -63,22 +94,17 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
 
     // Draw viewport rectangle
     ctx.strokeStyle = "#00ff00"
-    ctx.lineWidth = 1 // Reduced line width from 2 to 1 to make the viewport box thinner
+    ctx.lineWidth = 1
     ctx.strokeRect(viewportX, viewportY, viewportW, viewportH)
 
     // Draw viewport fill
     ctx.fillStyle = "rgba(0, 255, 0, 0.1)"
     ctx.fillRect(viewportX, viewportY, viewportW, viewportH)
-  }, [camera, canvasWidth, canvasHeight, minimapSize, worldPixelSize])
+  }, [camera, canvasWidth, canvasHeight, minimapSize, worldPixelSize, homeBaseLocation])
 
-  // World spans from -worldPixelSize to +worldPixelSize (total range: 2 * worldPixelSize)
-  // Map this to 0:2000 range
-  const totalWorldRange = worldPixelSize * 2 // Total pixels in world
-  const displayRange = 2000 // Display range 0-2000
+  const totalWorldRange = worldPixelSize * 2
+  const displayRange = 2000
 
-  // Convert camera position to 0-2000 coordinates
-  // Camera at -worldPixelSize (top-left) should show 0:0
-  // Camera at +worldPixelSize (bottom-right) should show 2000:2000
   const horizontalCoord = Math.round(((worldPixelSize - camera.x) / totalWorldRange) * displayRange)
   const verticalCoord = Math.round(((worldPixelSize - camera.y) / totalWorldRange) * displayRange)
 
@@ -88,11 +114,9 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
 
     const rect = canvas.getBoundingClientRect()
 
-    // Get click position relative to canvas
     const clickX = e.clientX - rect.left
     const clickY = e.clientY - rect.top
 
-    // Convert minimap coordinates to world coordinates
     const scale = minimapSize / (worldPixelSize * 2)
     const minimapCenterX = minimapSize / 2
     const minimapCenterY = minimapSize / 2
