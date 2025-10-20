@@ -28,13 +28,19 @@ export default function AdminLoginPage() {
 
       const data = await response.json()
 
+      console.log("[v0] Login response:", { ok: response.ok, data })
+
       if (response.ok) {
+        console.log("[v0] Login successful, redirecting to /admin")
+        // Add a small delay to ensure cookie is set
+        await new Promise((resolve) => setTimeout(resolve, 100))
         router.push("/admin")
         router.refresh()
       } else {
         setError(data.error || "Invalid credentials or unauthorized IP")
       }
     } catch (err) {
+      console.error("[v0] Login error:", err)
       setError("Login failed. Please try again.")
     } finally {
       setIsLoading(false)

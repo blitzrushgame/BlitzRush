@@ -120,6 +120,8 @@ export async function createAdminSession(admin: AdminUser): Promise<void> {
     loginTime: Date.now(),
   }
 
+  console.log("[v0] Creating admin session:", { email: admin.email, adminId: admin.id })
+
   const cookieStore = await cookies()
   cookieStore.set(ADMIN_SESSION_COOKIE, JSON.stringify(session), {
     httpOnly: true,
@@ -128,6 +130,8 @@ export async function createAdminSession(admin: AdminUser): Promise<void> {
     maxAge: SESSION_DURATION / 1000,
     path: "/",
   })
+
+  console.log("[v0] Admin session cookie set successfully")
 
   // Update last_login timestamp
   const supabase = createServiceRoleClient()
@@ -141,7 +145,10 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   const cookieStore = await cookies()
   const sessionCookie = cookieStore.get(ADMIN_SESSION_COOKIE)
 
+  console.log("[v0] Getting admin session, cookie exists:", !!sessionCookie)
+
   if (!sessionCookie) {
+    console.log("[v0] No admin session cookie found")
     return null
   }
 
@@ -150,10 +157,12 @@ export async function getAdminSession(): Promise<AdminSession | null> {
 
     // Check if session is expired
     if (Date.now() - session.loginTime > SESSION_DURATION) {
+      console.log("[v0] Admin session expired")
       await destroyAdminSession()
       return null
     }
 
+    console.log("[v0] Admin session retrieved successfully:", { email: session.email })
     return session
   } catch (error) {
     console.error("[v0] Error parsing admin session:", error)
