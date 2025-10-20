@@ -100,7 +100,16 @@ export async function verifyAdminCredentials(email: string, password: string): P
     return null
   }
 
+  console.log("[v0] Password verification debug:", {
+    email,
+    passwordLength: password.length,
+    hashLength: admin.password_hash?.length || 0,
+    hashPrefix: admin.password_hash?.substring(0, 10) || "none",
+  })
+
   const isValidPassword = await bcrypt.compare(password, admin.password_hash)
+
+  console.log("[v0] Password comparison result:", isValidPassword)
 
   if (!isValidPassword) {
     console.log("[v0] Invalid password for admin:", email)
