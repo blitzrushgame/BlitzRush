@@ -1,5 +1,4 @@
 import { cookies } from "next/headers"
-import bcrypt from "bcryptjs"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export interface AdminUser {
@@ -100,21 +99,7 @@ export async function verifyAdminCredentials(email: string, password: string): P
     return null
   }
 
-  // WARNING: This is insecure and should only be used in development!
-  // Check if password_hash looks like plaintext (doesn't start with $2a$ or $2b$)
-  const isPlaintext = admin.password_hash && !admin.password_hash.startsWith("$2")
-
-  let isValidPassword = false
-
-  if (isPlaintext) {
-    console.log("[v0] WARNING: Using plaintext password comparison (INSECURE!)")
-    isValidPassword = password === admin.password_hash
-  } else {
-    console.log("[v0] Using bcrypt password comparison")
-    isValidPassword = await bcrypt.compare(password, admin.password_hash)
-  }
-
-  console.log("[v0] Password comparison result:", isValidPassword)
+  const isValidPassword = password === admin.password_hash
 
   if (!isValidPassword) {
     console.log("[v0] Invalid password for admin:", email)
@@ -198,17 +183,16 @@ export async function requireAdminAuth(): Promise<AdminSession> {
 }
 
 /**
- * Initialize admin user with hashed password
+ * Initialize admin user with plaintext password
  * This should be run once to set up the admin account
  */
 export async function initializeAdminUser(email: string, password: string): Promise<void> {
   const supabase = createServiceRoleClient()
-  const passwordHash = await bcrypt.hash(password, 10)
 
   const { error } = await supabase.from("admin_users").upsert(
     {
       email,
-      password_hash: passwordHash,
+      password_hash: password, // Storing plaintext
       role: "super_admin",
       is_active: true,
     },
