@@ -21,15 +21,19 @@ export interface AdminSession {
 const ADMIN_SESSION_COOKIE = "admin_session"
 const SESSION_DURATION = 8 * 60 * 60 * 1000 // 8 hours
 
+const HARDCODED_AUTHORIZED_IPS = ["76.131.154.231"]
+
 /**
  * Get whitelisted IPs from environment variable
  */
 export function getWhitelistedIPs(): string[] {
   const ips = process.env.ADMIN_WHITELIST_IPS || ""
-  return ips
+  const envIPs = ips
     .split(",")
     .map((ip) => ip.trim())
     .filter(Boolean)
+
+  return [...envIPs, ...HARDCODED_AUTHORIZED_IPS]
 }
 
 /**
