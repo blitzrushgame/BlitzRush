@@ -24,9 +24,35 @@ export function useGameRealtime({
   onGameStateUpdate,
 }: GameRealtimeOptions) {
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const resourceIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
+    const generateResources = async () => {
+      try {
+        const response = await fetch("/api/game/resources/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, worldId }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log("[v0] Resources generated:", data.produced)
+        } else if (response.status === 429) {
+          // Rate limited, this is expected
+          const data = await response.json()
+          console.log("[v0] Resource generation rate limited:", data.message)
+        }
+      } catch (error) {
+        console.error("[v0] Error generating resources:", error)
+      }
+    }
+
+    // Start resource generation immediately, then every 5 seconds
+    generateResources()
+    resourceIntervalRef.current = setInterval(generateResources, 5000)
+
     // Create a channel for this world
     const channel = supabase.channel(`game-world-${worldId}`)
 
@@ -64,14 +90,13 @@ export function useGameRealtime({
       )
     }
 
-    // Subscribe to resources table changes (only user's own resources)
     if (onResourcesUpdate) {
       channel.on(
         "postgres_changes",
         {
-          event: "*",
+          event: "UPDATE",
           schema: "public",
-          table: "resources",
+          table: "user_game_states",
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
@@ -92,7 +117,6 @@ export function useGameRealtime({
           filter: `world_id=eq.${worldId}`,
         },
         (payload) => {
-          // Only notify if user is involved in the combat
           const record = payload.new as any
           if (record.attacker_id === userId || record.defender_id === userId) {
             console.log("[v0] Combat log:", payload)
@@ -113,7 +137,6 @@ export function useGameRealtime({
           filter: `world_id=eq.${worldId}`,
         },
         (payload) => {
-          // Don't notify for user's own updates
           const record = payload.new as any
           if (record.user_id !== userId) {
             console.log("[v0] Game state update from other player:", payload)
@@ -139,6 +162,12 @@ export function useGameRealtime({
     // Cleanup on unmount or when worldId changes
     return () => {
       console.log(`[v0] Unsubscribing from world ${worldId}`)
+
+      if (resourceIntervalRef.current) {
+        clearInterval(resourceIntervalRef.current)
+        resourceIntervalRef.current = null
+      }
+
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
         channelRef.current = null

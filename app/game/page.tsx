@@ -31,6 +31,15 @@ export default function GamePage() {
     },
     onResourcesUpdate: (payload) => {
       console.log("[v0] Real-time resources update received:", payload)
+      if (payload.new && payload.new.game_data && payload.new.game_data.resources) {
+        setGameState((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            resources: payload.new.game_data.resources,
+          }
+        })
+      }
     },
     onCombatLog: (payload) => {
       console.log("[v0] Real-time combat log received:", payload)
