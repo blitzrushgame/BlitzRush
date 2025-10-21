@@ -125,19 +125,6 @@ export async function signup(username: string, password: string, ipAddress: stri
     return { success: false, error: "Username already taken" }
   }
 
-  const { data: existingAccounts, error: countError } = await supabase
-    .from("users")
-    .select("id", { count: "exact" })
-    .eq("ip_address", ipAddress)
-
-  if (countError) {
-    return { success: false, error: countError.message }
-  }
-
-  if (existingAccounts && existingAccounts.length >= 2) {
-    return { success: false, error: "Maximum of 2 accounts allowed per IP address" }
-  }
-
   const { data: newUser, error } = await supabase
     .from("users")
     .insert({ username, password, ip_address: ipAddress })
