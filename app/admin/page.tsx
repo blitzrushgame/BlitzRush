@@ -28,9 +28,6 @@ export default async function AdminPage() {
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="bg-green-500 text-white p-4 mb-4">
-          ADMIN DASHBOARD IS RENDERING - If you see this, the page loaded successfully
-        </div>
         <h1 className="text-3xl font-bold text-foreground mb-8">Admin Panel</h1>
         <AdminTabs />
       </div>

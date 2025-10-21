@@ -12,10 +12,16 @@ export function AdminTabs() {
 
   return (
     <Tabs defaultValue="users" className="w-full">
-      <TabsList className="grid w-full grid-cols-3 mb-8">
-        <TabsTrigger value="users">Users</TabsTrigger>
-        <TabsTrigger value="chats">Chats</TabsTrigger>
-        <TabsTrigger value="alliances">Alliances</TabsTrigger>
+      <TabsList className="grid w-full grid-cols-3 mb-8 bg-orange-600/20 border border-orange-500/30">
+        <TabsTrigger value="users" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">
+          Users
+        </TabsTrigger>
+        <TabsTrigger value="chats" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">
+          Chats
+        </TabsTrigger>
+        <TabsTrigger value="alliances" className="data-[state=active]:bg-orange-600 data-[state=active]:text-white">
+          Alliances
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="users">
