@@ -63,6 +63,16 @@ export default function GamePage() {
       }
 
       setUserId(Number(data.userId))
+      setUsername(data.username || "Player")
+
+      try {
+        await fetch("/api/game/log-ip", {
+          method: "POST",
+        })
+      } catch (error) {
+        console.error("[v0] Error logging IP:", error)
+      }
+
       const userResponse = await fetch(`/api/user/${data.userId}`)
       const userData = await userResponse.json()
 
@@ -71,7 +81,6 @@ export default function GamePage() {
         return
       }
 
-      setUsername(userData.username || "Player")
       setAllianceId(userData.alliance_id)
 
       await loadGameState(Number(data.userId), currentMap)

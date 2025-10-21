@@ -24,12 +24,24 @@ type User = {
   muted_until: string | null
 }
 
+type IpHistory = {
+  ip_address: string
+  first_seen: string
+  last_seen: string
+  access_count: number
+}
+// </CHANGE>
+
 export function AdminUserList() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [editingUser, setEditingUser] = useState<number | null>(null)
   const [newUsername, setNewUsername] = useState("")
   const [newPassword, setNewPassword] = useState("")
+
+  const [ipHistory, setIpHistory] = useState<Record<number, IpHistory[]>>({})
+  const [loadingIpHistory, setLoadingIpHistory] = useState<Record<number, boolean>>({})
+  // </CHANGE>
 
   const [muteType, setMuteType] = useState<"temporary" | "permanent">("temporary")
   const [muteDuration, setMuteDuration] = useState("24")
@@ -61,6 +73,29 @@ export function AdminUserList() {
       setLoading(false)
     }
   }
+
+  const fetchIpHistory = async (userId: number) => {
+    setLoadingIpHistory((prev) => ({ ...prev, [userId]: true }))
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/ip-history`)
+      const data = await response.json()
+      setIpHistory((prev) => ({ ...prev, [userId]: data }))
+    } catch (error) {
+      console.error("Error fetching IP history:", error)
+    } finally {
+      setLoadingIpHistory((prev) => ({ ...prev, [userId]: false }))
+    }
+  }
+
+  const handleEditUser = (userId: number, username: string) => {
+    setEditingUser(userId)
+    setNewUsername(username)
+    // Fetch IP history when editing user
+    if (!ipHistory[userId]) {
+      fetchIpHistory(userId)
+    }
+  }
+  // </CHANGE>
 
   const handleUpdateUsername = async (userId: number) => {
     const response = await fetch("/api/admin/update-user", {
@@ -228,13 +263,7 @@ export function AdminUserList() {
                     </Button>
                   </>
                 ) : (
-                  <Button
-                    onClick={() => {
-                      setEditingUser(user.id)
-                      setNewUsername(user.username)
-                    }}
-                    size="sm"
-                  >
+                  <Button onClick={() => handleEditUser(user.id, user.username)} size="sm">
                     Edit
                   </Button>
                 )}
@@ -243,6 +272,31 @@ export function AdminUserList() {
 
             {editingUser === user.id && (
               <div className="space-y-6 pt-4 border-t">
+                <div className="space-y-2">
+                  <Label className="text-blue-500">IP Address History</Label>
+                  {loadingIpHistory[user.id] ? (
+                    <p className="text-sm text-muted-foreground">Loading IP history...</p>
+                  ) : ipHistory[user.id] && ipHistory[user.id].length > 0 ? (
+                    <div className="space-y-2">
+                      {ipHistory[user.id].map((ip, index) => (
+                        <div key={index} className="p-3 bg-muted rounded-md">
+                          <p className="text-sm font-mono font-semibold">{ip.ip_address}</p>
+                          <p className="text-xs text-muted-foreground">
+                            First seen: {new Date(ip.first_seen).toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Last seen: {new Date(ip.last_seen).toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Access count: {ip.access_count}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No IP history available</p>
+                  )}
+                </div>
+                {/* </CHANGE> */}
+
                 <div className="space-y-2">
                   <Label>Update Password</Label>
                   <div className="flex gap-2">

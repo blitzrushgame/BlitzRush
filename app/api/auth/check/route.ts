@@ -14,21 +14,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ authenticated: false })
   }
 
+  if (!user.email_confirmed_at) {
+    return NextResponse.json({
+      authenticated: false,
+      error: "Please verify your email before logging in. Check your inbox for the verification link.",
+    })
+  }
+
   const serviceSupabase = createServiceRoleClient()
   const { data: userData, error: userError } = await serviceSupabase
     .from("users")
-    .select("id")
+    .select("id, username")
     .eq("auth_user_id", user.id)
     .maybeSingle()
 
   if (userError || !userData) {
-    console.log("[v0] User not found in database for auth_user_id:", user.id)
     return NextResponse.json({
       authenticated: false,
       error: "Account not found. Please sign up first.",
     })
   }
 
-  // Return the integer id from the users table
-  return NextResponse.json({ authenticated: true, userId: userData.id })
+  // Return the integer id and username from the users table
+  return NextResponse.json({
+    authenticated: true,
+    userId: userData.id,
+    username: userData.username,
+  })
 }

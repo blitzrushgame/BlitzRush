@@ -31,7 +31,6 @@ export default function HomePage() {
 
     const supabase = createClient()
 
-    // Look up email from username
     const lookupRes = await fetch("/api/auth/lookup-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -39,14 +38,14 @@ export default function HomePage() {
     })
 
     if (!lookupRes.ok) {
-      setError("Username not found")
+      const { error: lookupError } = await lookupRes.json()
+      setError(lookupError || "Username not found")
       setLoading(false)
       return
     }
 
     const { email: userEmail } = await lookupRes.json()
 
-    // Authenticate with Supabase using the email
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: userEmail,
       password,
@@ -66,17 +65,13 @@ export default function HomePage() {
     setError("")
     setSuccessMessage("")
 
-    console.log("[v0] Starting sign up process for username:", username, "email:", email)
-
     const supabase = createClient()
 
-    // Create Supabase Auth account
-    console.log("[v0] Creating Supabase Auth account...")
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/game`,
+        emailRedirectTo: `${window.location.origin}/game`,
         data: {
           username: username,
         },
@@ -84,22 +79,17 @@ export default function HomePage() {
     })
 
     if (signUpError) {
-      console.error("[v0] Supabase Auth error:", signUpError)
       setError(signUpError.message)
       setLoading(false)
       return
     }
 
     if (!authData.user) {
-      console.error("[v0] No user data returned from Supabase Auth")
       setError("Failed to create account")
       setLoading(false)
       return
     }
 
-    console.log("[v0] Supabase Auth account created, user ID:", authData.user.id)
-
-    console.log("[v0] Calling /api/auth/register...")
     const registerRes = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -110,23 +100,16 @@ export default function HomePage() {
       }),
     })
 
-    console.log("[v0] Register API response status:", registerRes.status)
-
     if (!registerRes.ok) {
-      const responseText = await registerRes.text()
-      console.error("[v0] Register API error response:", responseText)
-      try {
-        const { error: registerError } = JSON.parse(responseText)
-        setError(registerError || "Failed to register username")
-      } catch {
-        setError("Failed to register username")
-      }
+      const { error: registerError } = await registerRes.json()
+      setError(registerError || "Failed to register username")
       setLoading(false)
       return
     }
 
-    console.log("[v0] Registration successful!")
-    setSuccessMessage("Account created! Please check your email to verify your account before logging in.")
+    setSuccessMessage(
+      "Account created successfully! Please check your email and click the verification link before logging in.",
+    )
     setIsSignUp(false)
     setUsernameOrEmail("")
     setPassword("")
@@ -217,6 +200,7 @@ export default function HomePage() {
                       className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
                       placeholder="••••••••"
                       required
+                      minLength={6}
                     />
                   </div>
                 </>

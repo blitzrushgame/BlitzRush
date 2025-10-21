@@ -13,17 +13,20 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (error || !data) {
-    return NextResponse.json({ error: "Username not found. Please create a new account." }, { status: 404 })
-  }
-
-  if (data.email) {
-    return NextResponse.json({ email: data.email })
+    return NextResponse.json({ error: "Username not found" }, { status: 404 })
   }
 
   const { data: authData, error: authError } = await supabase.auth.admin.getUserById(data.auth_user_id)
 
   if (authError || !authData.user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 })
+  }
+
+  if (!authData.user.email_confirmed_at) {
+    return NextResponse.json(
+      { error: "Please verify your email before logging in. Check your inbox for the verification link." },
+      { status: 403 },
+    )
   }
 
   return NextResponse.json({ email: authData.user.email })
