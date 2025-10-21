@@ -31,14 +31,13 @@ export function AdminUserList() {
   const [newUsername, setNewUsername] = useState("")
   const [newPassword, setNewPassword] = useState("")
 
-  const [banType, setBanType] = useState<"temporary" | "permanent">("temporary")
-  const [banDuration, setBanDuration] = useState("24") // hours
-  const [banReason, setBanReason] = useState("")
   const [muteType, setMuteType] = useState<"temporary" | "permanent">("temporary")
-  const [muteDuration, setMuteDuration] = useState("24") // hours
+  const [muteDuration, setMuteDuration] = useState("24")
+  const [muteTimeUnit, setMuteTimeUnit] = useState<"minutes" | "hours" | "days">("hours")
   const [muteReason, setMuteReason] = useState("")
   const [ipBanType, setIpBanType] = useState<"temporary" | "permanent">("temporary")
-  const [ipBanDuration, setIpBanDuration] = useState("24") // hours
+  const [ipBanDuration, setIpBanDuration] = useState("24")
+  const [ipBanTimeUnit, setIpBanTimeUnit] = useState<"minutes" | "hours" | "days">("hours")
   const [ipBanReason, setIpBanReason] = useState("")
 
   useEffect(() => {
@@ -94,52 +93,17 @@ export function AdminUserList() {
     }
   }
 
-  const handleBanUser = async (userId: number) => {
-    if (!banReason.trim()) {
-      alert("Please provide a ban reason")
-      return
-    }
-
-    const response = await fetch("/api/admin/moderation/ban", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        banType,
-        duration: banType === "temporary" ? Number.parseInt(banDuration) : null,
-        reason: banReason,
-      }),
-    })
-
-    if (response.ok) {
-      alert("User banned successfully")
-      fetchUsers()
-      setBanReason("")
-    } else {
-      const error = await response.json()
-      alert(`Failed to ban user: ${error.error}`)
-    }
-  }
-
-  const handleUnbanUser = async (userId: number) => {
-    const response = await fetch("/api/admin/moderation/unban", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
-    })
-
-    if (response.ok) {
-      alert("User unbanned successfully")
-      fetchUsers()
-    } else {
-      alert("Failed to unban user")
-    }
-  }
-
   const handleMuteUser = async (userId: number) => {
     if (!muteReason.trim()) {
       alert("Please provide a mute reason")
       return
+    }
+
+    let durationInHours = Number.parseInt(muteDuration)
+    if (muteTimeUnit === "minutes") {
+      durationInHours = durationInHours / 60
+    } else if (muteTimeUnit === "days") {
+      durationInHours = durationInHours * 24
     }
 
     const response = await fetch("/api/admin/moderation/mute", {
@@ -148,7 +112,7 @@ export function AdminUserList() {
       body: JSON.stringify({
         userId,
         muteType,
-        duration: muteType === "temporary" ? Number.parseInt(muteDuration) : null,
+        duration: muteType === "temporary" ? durationInHours : null,
         reason: muteReason,
       }),
     })
@@ -184,13 +148,20 @@ export function AdminUserList() {
       return
     }
 
+    let durationInHours = Number.parseInt(ipBanDuration)
+    if (ipBanTimeUnit === "minutes") {
+      durationInHours = durationInHours / 60
+    } else if (ipBanTimeUnit === "days") {
+      durationInHours = durationInHours * 24
+    }
+
     const response = await fetch("/api/admin/moderation/ip-ban", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ipAddress,
         banType: ipBanType,
-        duration: ipBanType === "temporary" ? Number.parseInt(ipBanDuration) : null,
+        duration: ipBanType === "temporary" ? durationInHours : null,
         reason: ipBanReason,
       }),
     })
@@ -229,9 +200,6 @@ export function AdminUserList() {
                       user.username
                     )}
                   </p>
-                  {user.is_banned && (
-                    <Badge variant="destructive">{user.ban_type === "permanent" ? "BANNED" : "TEMP BAN"}</Badge>
-                  )}
                   {user.is_muted && (
                     <Badge variant="secondary">{user.mute_type === "permanent" ? "MUTED" : "TEMP MUTE"}</Badge>
                   )}
@@ -241,12 +209,6 @@ export function AdminUserList() {
                 <p className="text-sm text-muted-foreground">
                   Created: {new Date(user.created_at).toLocaleDateString()}
                 </p>
-                {user.is_banned && user.ban_reason && (
-                  <p className="text-sm text-red-500">Ban Reason: {user.ban_reason}</p>
-                )}
-                {user.is_banned && user.banned_until && user.ban_type === "temporary" && (
-                  <p className="text-sm text-red-500">Banned Until: {new Date(user.banned_until).toLocaleString()}</p>
-                )}
                 {user.is_muted && user.mute_reason && (
                   <p className="text-sm text-orange-500">Mute Reason: {user.mute_reason}</p>
                 )}
@@ -281,7 +243,6 @@ export function AdminUserList() {
 
             {editingUser === user.id && (
               <div className="space-y-6 pt-4 border-t">
-                {/* Password Update Section */}
                 <div className="space-y-2">
                   <Label>Update Password</Label>
                   <div className="flex gap-2">
@@ -296,45 +257,6 @@ export function AdminUserList() {
                       Update Password
                     </Button>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-red-500">Ban Management</Label>
-                  {user.is_banned ? (
-                    <Button onClick={() => handleUnbanUser(user.id)} variant="outline" size="sm">
-                      Unban User
-                    </Button>
-                  ) : (
-                    <div className="space-y-2">
-                      <Select value={banType} onValueChange={(v: any) => setBanType(v)}>
-                        <SelectTrigger className="w-48">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="temporary">Temporary Ban</SelectItem>
-                          <SelectItem value="permanent">Permanent Ban</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {banType === "temporary" && (
-                        <Input
-                          type="number"
-                          value={banDuration}
-                          onChange={(e) => setBanDuration(e.target.value)}
-                          placeholder="Duration (hours)"
-                          className="w-48"
-                        />
-                      )}
-                      <Textarea
-                        value={banReason}
-                        onChange={(e) => setBanReason(e.target.value)}
-                        placeholder="Ban reason (required)"
-                        className="w-full"
-                      />
-                      <Button onClick={() => handleBanUser(user.id)} variant="destructive" size="sm">
-                        Ban User
-                      </Button>
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -355,13 +277,25 @@ export function AdminUserList() {
                         </SelectContent>
                       </Select>
                       {muteType === "temporary" && (
-                        <Input
-                          type="number"
-                          value={muteDuration}
-                          onChange={(e) => setMuteDuration(e.target.value)}
-                          placeholder="Duration (hours)"
-                          className="w-48"
-                        />
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            value={muteDuration}
+                            onChange={(e) => setMuteDuration(e.target.value)}
+                            placeholder="Duration"
+                            className="w-32"
+                          />
+                          <Select value={muteTimeUnit} onValueChange={(v: any) => setMuteTimeUnit(v)}>
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="minutes">Minutes</SelectItem>
+                              <SelectItem value="hours">Hours</SelectItem>
+                              <SelectItem value="days">Days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       )}
                       <Textarea
                         value={muteReason}
@@ -389,13 +323,25 @@ export function AdminUserList() {
                       </SelectContent>
                     </Select>
                     {ipBanType === "temporary" && (
-                      <Input
-                        type="number"
-                        value={ipBanDuration}
-                        onChange={(e) => setIpBanDuration(e.target.value)}
-                        placeholder="Duration (hours)"
-                        className="w-48"
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          value={ipBanDuration}
+                          onChange={(e) => setIpBanDuration(e.target.value)}
+                          placeholder="Duration"
+                          className="w-32"
+                        />
+                        <Select value={ipBanTimeUnit} onValueChange={(v: any) => setIpBanTimeUnit(v)}>
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="minutes">Minutes</SelectItem>
+                            <SelectItem value="hours">Hours</SelectItem>
+                            <SelectItem value="days">Days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     )}
                     <Textarea
                       value={ipBanReason}
