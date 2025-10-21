@@ -6,14 +6,21 @@ export async function POST(request: Request) {
 
   const supabase = createServiceRoleClient()
 
-  const { data, error } = await supabase.from("users").select("id, username").ilike("username", username).maybeSingle()
+  const { data, error } = await supabase
+    .from("users")
+    .select("auth_user_id, username, email")
+    .ilike("username", username)
+    .maybeSingle()
 
   if (error || !data) {
     return NextResponse.json({ error: "Username not found. Please create a new account." }, { status: 404 })
   }
 
-  // Get the email from Supabase Auth using the user ID
-  const { data: authData, error: authError } = await supabase.auth.admin.getUserById(data.id)
+  if (data.email) {
+    return NextResponse.json({ email: data.email })
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.admin.getUserById(data.auth_user_id)
 
   if (authError || !authData.user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 })

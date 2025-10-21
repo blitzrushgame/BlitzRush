@@ -66,9 +66,12 @@ export default function HomePage() {
     setError("")
     setSuccessMessage("")
 
+    console.log("[v0] Starting sign up process for username:", username, "email:", email)
+
     const supabase = createClient()
 
     // Create Supabase Auth account
+    console.log("[v0] Creating Supabase Auth account...")
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -81,34 +84,48 @@ export default function HomePage() {
     })
 
     if (signUpError) {
+      console.error("[v0] Supabase Auth error:", signUpError)
       setError(signUpError.message)
       setLoading(false)
       return
     }
 
     if (!authData.user) {
+      console.error("[v0] No user data returned from Supabase Auth")
       setError("Failed to create account")
       setLoading(false)
       return
     }
 
-    // Store username in database
+    console.log("[v0] Supabase Auth account created, user ID:", authData.user.id)
+
+    console.log("[v0] Calling /api/auth/register...")
     const registerRes = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: username,
         email: email,
+        auth_user_id: authData.user.id,
       }),
     })
 
+    console.log("[v0] Register API response status:", registerRes.status)
+
     if (!registerRes.ok) {
-      const { error: registerError } = await registerRes.json()
-      setError(registerError || "Failed to register username")
+      const responseText = await registerRes.text()
+      console.error("[v0] Register API error response:", responseText)
+      try {
+        const { error: registerError } = JSON.parse(responseText)
+        setError(registerError || "Failed to register username")
+      } catch {
+        setError("Failed to register username")
+      }
       setLoading(false)
       return
     }
 
+    console.log("[v0] Registration successful!")
     setSuccessMessage("Account created! Please check your email to verify your account before logging in.")
     setIsSignUp(false)
     setUsernameOrEmail("")

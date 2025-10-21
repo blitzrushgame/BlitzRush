@@ -2,9 +2,9 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export async function POST(request: Request) {
-  const { username, email } = await request.json()
+  const { username, email, auth_user_id } = await request.json()
 
-  console.log("[v0] Register API called for username:", username, "email:", email)
+  console.log("[v0] Register API called for username:", username, "email:", email, "auth_user_id:", auth_user_id)
 
   const supabase = createServiceRoleClient()
 
@@ -26,14 +26,30 @@ export async function POST(request: Request) {
 
   console.log("[v0] Creating user record in database")
   const { error } = await supabase.from("users").insert({
+    auth_user_id: auth_user_id,
     username: username,
     email: email,
-    password: "supabase_auth", // Placeholder to satisfy NOT NULL constraint
-    ip_address: "0.0.0.0", // Placeholder to satisfy NOT NULL constraint
+    password: "supabase_auth",
+    ip_address: "0.0.0.0",
+    is_banned: false,
+    is_muted: false,
+    ban_type: null,
+    ban_reason: null,
+    banned_at: null,
+    banned_until: null,
+    banned_by_admin_id: null,
+    mute_type: null,
+    mute_reason: null,
+    muted_at: null,
+    muted_until: null,
+    muted_by_admin_id: null,
   })
 
   if (error) {
-    console.error("[v0] Error creating user:", error)
+    console.error("[v0] Error creating user - Full error object:", JSON.stringify(error, null, 2))
+    console.error("[v0] Error code:", error.code)
+    console.error("[v0] Error message:", error.message)
+    console.error("[v0] Error details:", error.details)
 
     if (error.code === "23505") {
       return NextResponse.json({ error: "Username already taken" }, { status: 400 })
