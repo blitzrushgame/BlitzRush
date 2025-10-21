@@ -1,30 +1,21 @@
-import { NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase-server";
-import type { NextRequest } from "next/server";
+import type { NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
-  const supabase = await createServerClient();
-  const ip = request.headers.get("x-forwarded-for") || "unknown";
-
-  const { data: banned } = await supabase
-    .from("banned_ips")
-    .select("id, reason")
-    .eq("ip_address", ip)
-    .single();
-
-  if (banned) {
-    const redirectUrl = new URL("/banned", request.url);
-    if (banned.reason) {
-      redirectUrl.searchParams.set("reason", banned.reason);
-    }
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  return NextResponse.next();
+  // No middleware needed for simple auth system
+  // Authentication is handled via cookies in lib/auth/simple-auth.ts
+  return
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|banned|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
+     * Feel free to modify this pattern to include more paths.
+     */
+    "/((?!_next/static|_next/image|favicon.ico|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
-};
+}
