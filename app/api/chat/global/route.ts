@@ -86,14 +86,12 @@ export async function POST(request: Request) {
     const { data: userData } = await supabase
       .from("users")
       .select("id, is_muted, mute_type, mute_reason, muted_until")
-      .eq("auth_user_id", userId)
+      .eq("id", userId)
       .single()
 
     if (!userData) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
-
-    const userIntegerId = userData.id
 
     if (userData?.is_muted) {
       // Check if temporary mute has expired
@@ -111,7 +109,7 @@ export async function POST(request: Request) {
               muted_at: null,
               muted_by_admin_id: null,
             })
-            .eq("id", userIntegerId)
+            .eq("id", userId)
         } else {
           return NextResponse.json(
             { error: userData.mute_reason || "You are muted and cannot send messages" },
@@ -130,7 +128,7 @@ export async function POST(request: Request) {
     const { data: recentMessages } = await supabase
       .from("global_chat")
       .select("created_at")
-      .eq("user_id", userIntegerId)
+      .eq("user_id", userId)
       .gte("created_at", threeSecondsAgo)
       .limit(1)
 
@@ -139,7 +137,7 @@ export async function POST(request: Request) {
     }
 
     const { error: insertError } = await supabase.from("global_chat").insert({
-      user_id: userIntegerId,
+      user_id: userId,
       username,
       message,
       created_at: new Date().toISOString(),

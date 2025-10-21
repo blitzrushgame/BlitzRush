@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { calculateProductionRates } from "@/lib/game/resource-production"
 import { STORAGE_CAPACITY } from "@/lib/game/resource-constants"
 
@@ -13,21 +12,12 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient()
-    const serviceSupabase = createServiceRoleClient()
-
-    const { data: userData } = await serviceSupabase.from("users").select("id").eq("auth_user_id", userId).single()
-
-    if (!userData) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    const userIntegerId = userData.id
 
     // Get current game state
     const { data: gameState, error: stateError } = await supabase
       .from("user_game_states")
       .select("game_data, last_updated")
-      .eq("user_id", userIntegerId)
+      .eq("user_id", userId)
       .eq("world_id", worldId)
       .single()
 
@@ -51,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate production rates based on buildings
-    const productionRates = await calculateProductionRates(userIntegerId, worldId)
+    const productionRates = await calculateProductionRates(userId, worldId)
 
     // Calculate resources produced (rates are per hour, convert to per second)
     const hoursElapsed = secondsElapsed / 3600
@@ -87,7 +77,7 @@ export async function POST(request: NextRequest) {
         },
         last_updated: now.toISOString(),
       })
-      .eq("user_id", userIntegerId)
+      .eq("user_id", userId)
       .eq("world_id", worldId)
 
     if (updateError) {

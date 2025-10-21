@@ -55,6 +55,9 @@ export default function GamePage() {
       const data = await response.json()
 
       if (!data.authenticated) {
+        if (data.error) {
+          alert(data.error)
+        }
         router.push("/")
         return
       }

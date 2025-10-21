@@ -9,9 +9,21 @@ interface MinimapProps {
   canvasHeight: number
   currentMap: number
   onCameraMove: (x: number, y: number) => void
+  userId: number | null
+  username: string
+  allianceId: number | null
 }
 
-export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap, onCameraMove }: MinimapProps) {
+export default function Minimap({
+  camera,
+  canvasWidth,
+  canvasHeight,
+  currentMap,
+  onCameraMove,
+  userId,
+  username,
+  allianceId,
+}: MinimapProps) {
   const minimapRef = useRef<HTMLCanvasElement>(null)
   const [homeBaseLocation, setHomeBaseLocation] = useState<{ x: number; y: number } | null>(null)
 
@@ -22,11 +34,10 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
 
   useEffect(() => {
     const fetchHomeBase = async () => {
-      try {
-        const userIdStr = localStorage.getItem("userId")
-        if (!userIdStr) return
+      if (!userId) return
 
-        const response = await fetch(`/api/game/home-base/status?userId=${userIdStr}`)
+      try {
+        const response = await fetch(`/api/game/home-base/status?userId=${userId}`)
         if (response.ok) {
           const data = await response.json()
           if (data.homeBase && data.homeBase.world_id === currentMap) {
@@ -44,7 +55,7 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
     fetchHomeBase()
     const interval = setInterval(fetchHomeBase, 5000)
     return () => clearInterval(interval)
-  }, [currentMap])
+  }, [currentMap, userId])
 
   useEffect(() => {
     const canvas = minimapRef.current
@@ -56,7 +67,6 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
     ctx.fillStyle = "#000000"
     ctx.fillRect(0, 0, minimapSize, minimapSize)
 
-    // Scale factor to fit world into minimap
     const scale = minimapSize / (worldPixelSize * 2)
 
     if (homeBaseLocation) {
@@ -68,19 +78,16 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
 
       console.log("[v0] Drawing home base at minimap coords:", homeBaseMinimapX, homeBaseMinimapY)
 
-      // Draw green circle for home base (larger and brighter)
       ctx.fillStyle = "#00ff00"
       ctx.beginPath()
       ctx.arc(homeBaseMinimapX, homeBaseMinimapY, 6, 0, Math.PI * 2)
       ctx.fill()
 
-      // Draw white outline for better visibility
       ctx.strokeStyle = "#ffffff"
       ctx.lineWidth = 2
       ctx.stroke()
     }
 
-    // Draw viewport rectangle
     const viewportWidth = canvasWidth / camera.zoom
     const viewportHeight = canvasHeight / camera.zoom
 
@@ -92,12 +99,10 @@ export default function Minimap({ camera, canvasWidth, canvasHeight, currentMap,
     const viewportW = viewportWidth * scale
     const viewportH = viewportHeight * scale
 
-    // Draw viewport rectangle
     ctx.strokeStyle = "#00ff00"
     ctx.lineWidth = 1
     ctx.strokeRect(viewportX, viewportY, viewportW, viewportH)
 
-    // Draw viewport fill
     ctx.fillStyle = "rgba(0, 255, 0, 0.1)"
     ctx.fillRect(viewportX, viewportY, viewportW, viewportH)
   }, [camera, canvasWidth, canvasHeight, minimapSize, worldPixelSize, homeBaseLocation])

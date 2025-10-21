@@ -13,20 +13,11 @@ export async function POST(request: Request) {
 
     const supabase = createServiceRoleClient()
 
-    const { data: existingUser } = await supabase.from("users").select("id").eq("auth_user_id", userId).maybeSingle()
-
-    if (!existingUser) {
-      console.error("[v0] User not found in database with auth_user_id:", userId)
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    const userIntegerId = existingUser.id
-
     // Check if user already has a home base
     const { data: existing } = await supabase
       .from("buildings")
       .select("id, x, y")
-      .eq("user_id", userIntegerId)
+      .eq("user_id", userId)
       .eq("world_id", 1)
       .eq("building_type", "base")
       .eq("is_home_base", true)
@@ -51,7 +42,7 @@ export async function POST(request: Request) {
     const { data: result, error: insertError } = await supabase
       .from("buildings")
       .insert({
-        user_id: userIntegerId,
+        user_id: userId,
         world_id: 1,
         building_type: "base",
         x,
