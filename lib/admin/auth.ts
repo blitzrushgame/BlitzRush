@@ -4,30 +4,32 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 export async function requireAdminAuth() {
   try {
     const cookieStore = await cookies()
-    const sessionCookie = cookieStore.get("session")
+    const adminAuthCookie = cookieStore.get("admin_authenticated")
+    const adminSessionCookie = cookieStore.get("admin_session")
 
-    if (!sessionCookie) {
+    if (!adminAuthCookie || adminAuthCookie.value !== "true") {
       return null
     }
 
-    const sessionData = JSON.parse(sessionCookie.value)
-    const userId = sessionData.userId
+    // Get admin details from session cookie
+    if (!adminSessionCookie) {
+      return null
+    }
 
-    if (!userId) {
+    const sessionData = JSON.parse(adminSessionCookie.value)
+    const adminId = sessionData.adminId
+
+    if (!adminId) {
       return null
     }
 
     const supabase = createServiceRoleClient()
 
-    // Check if user is an admin
-    const { data: admin, error } = await supabase
-      .from("admins")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("is_active", true)
-      .single()
+    // Check if user is an admin in admin_users table
+    const { data: admin, error } = await supabase.from("admin_users").select("*").eq("id", adminId).single()
 
     if (error || !admin) {
+      console.error("[v0] Admin not found:", error)
       return null
     }
 

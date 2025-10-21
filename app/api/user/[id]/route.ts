@@ -5,9 +5,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const supabase = createServiceRoleClient()
 
-  const { data, error } = await supabase.from("users").select("id, username, alliance_id").eq("id", id).single()
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, username, alliance_id, is_banned, is_muted, mute_reason")
+    .eq("auth_user_id", id)
+    .single()
 
   if (error) {
+    console.error("[v0] Error fetching user:", error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 

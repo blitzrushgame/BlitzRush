@@ -13,29 +13,20 @@ export async function POST(request: Request) {
 
     const supabase = createServiceRoleClient()
 
-    const { data: existingUser } = await supabase.from("users").select("id").eq("id", userId).maybeSingle()
+    const { data: existingUser } = await supabase.from("users").select("id").eq("auth_user_id", userId).maybeSingle()
 
     if (!existingUser) {
-      console.log("[v0] User not found in database, creating user record")
-      const { error: userError } = await supabase.from("users").insert({
-        id: userId,
-        username: username || `Player${userId}`,
-        password: "supabase_auth",
-        ip_address: "0.0.0.0",
-      })
-
-      if (userError) {
-        console.error("[v0] Error creating user:", userError)
-        return NextResponse.json({ error: userError.message }, { status: 500 })
-      }
-      console.log("[v0] User record created successfully")
+      console.error("[v0] User not found in database with auth_user_id:", userId)
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
+
+    const userIntegerId = existingUser.id
 
     // Check if user already has a home base
     const { data: existing } = await supabase
       .from("buildings")
       .select("id, x, y")
-      .eq("user_id", userId)
+      .eq("user_id", userIntegerId)
       .eq("world_id", 1)
       .eq("building_type", "base")
       .eq("is_home_base", true)
@@ -60,7 +51,7 @@ export async function POST(request: Request) {
     const { data: result, error: insertError } = await supabase
       .from("buildings")
       .insert({
-        user_id: userId,
+        user_id: userIntegerId,
         world_id: 1,
         building_type: "base",
         x,

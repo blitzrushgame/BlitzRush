@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get("user_id")
+  const supabase = await createClient()
 
-  if (userId) {
-    return NextResponse.json({ authenticated: true, userId: userId.value })
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
+
+  if (error || !user) {
+    return NextResponse.json({ authenticated: false })
   }
 
-  return NextResponse.json({ authenticated: false })
+  // Return the auth_user_id (UUID) from Supabase Auth
+  return NextResponse.json({ authenticated: true, userId: user.id })
 }
