@@ -33,10 +33,14 @@ export default function SignUpPage() {
     const result = await signup(username, password, ipAddress)
 
     if (!result.success) {
-      setError(result.error || "Signup failed")
-      setIsLoading(false)
+      if (result.error?.includes("banned")) {
+        router.push("/banned")
+      } else {
+        setError(result.error || "Signup failed")
+        setIsLoading(false)
+      }
     } else {
-      router.push("/")
+      router.push("/game")
     }
   }
 

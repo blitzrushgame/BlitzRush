@@ -57,6 +57,9 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
     const [currentTime, setCurrentTime] = useState(new Date()) // Added currentTime state for live timestamp updates
     const [globalCooldown, setGlobalCooldown] = useState(0) // Added cooldown states
     const [allianceCooldown, setAllianceCooldown] = useState(0)
+    const [isMuted, setIsMuted] = useState(false)
+    const [muteReason, setMuteReason] = useState<string | null>(null)
+    const [mutedUntil, setMutedUntil] = useState<Date | null>(null)
     const globalScrollRef = useRef<HTMLDivElement>(null)
     const allianceScrollRef = useRef<HTMLDivElement>(null)
     const wasAtBottomRef = useRef({ global: true, alliance: true })
@@ -88,9 +91,35 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
       }
     }
 
+    const checkMuteStatus = async () => {
+      try {
+        const res = await fetch(`/api/user/${userId}`)
+        if (res.ok) {
+          const userData = await res.json()
+          if (userData.is_muted) {
+            setIsMuted(true)
+            setMuteReason(userData.mute_reason)
+            if (userData.muted_until) {
+              setMutedUntil(new Date(userData.muted_until))
+            }
+          } else {
+            setIsMuted(false)
+            setMuteReason(null)
+            setMutedUntil(null)
+          }
+        }
+      } catch (error) {
+        console.error("[v0] Error checking mute status:", error)
+      }
+    }
+
     useEffect(() => {
       fetchMessages()
-      const interval = setInterval(fetchMessages, 5000)
+      checkMuteStatus()
+      const interval = setInterval(() => {
+        fetchMessages()
+        checkMuteStatus()
+      }, 5000)
       return () => clearInterval(interval)
     }, [allianceId])
 
@@ -184,6 +213,10 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
     const sendGlobalMessage = async () => {
       if (!globalInput.trim()) return
       if (globalCooldown > 0) return
+      if (isMuted) {
+        alert(muteReason || "You are muted and cannot send messages.")
+        return
+      }
 
       wasAtBottomRef.current.global = true
 
@@ -201,6 +234,13 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
         if (res.status === 429) {
           const data = await res.json()
           alert(data.error)
+          return
+        }
+
+        if (res.status === 403) {
+          const data = await res.json()
+          alert(data.error || "You are muted and cannot send messages.")
+          checkMuteStatus()
           return
         }
 
@@ -287,19 +327,16 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
     }
 
     const renderMessageWithCoordinates = (message: string) => {
-      // Match pattern: [MAP:1:1000:1500]
       const coordPattern = /\[MAP:(\d+):(\d+):(\d+)\]/g
       const parts: (string | JSX.Element)[] = []
       let lastIndex = 0
       let match
 
       while ((match = coordPattern.exec(message)) !== null) {
-        // Add text before the coordinate
         if (match.index > lastIndex) {
           parts.push(message.substring(lastIndex, match.index))
         }
 
-        // Add clickable coordinate
         const mapId = Number.parseInt(match[1])
         const x = Number.parseInt(match[2])
         const y = Number.parseInt(match[3])
@@ -317,12 +354,24 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
         lastIndex = match.index + match[0].length
       }
 
-      // Add remaining text
       if (lastIndex < message.length) {
         parts.push(message.substring(lastIndex))
       }
 
       return parts.length > 0 ? parts : message
+    }
+
+    const getMuteMessage = () => {
+      if (!isMuted) return null
+      if (mutedUntil) {
+        const timeLeft = mutedUntil.getTime() - currentTime.getTime()
+        if (timeLeft > 0) {
+          const hours = Math.floor(timeLeft / (1000 * 60 * 60))
+          const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60))
+          return `Muted for ${hours}h ${minutes}m`
+        }
+      }
+      return "Muted"
     }
 
     return (
@@ -374,15 +423,16 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
                   value={globalInput}
                   onChange={(e) => setGlobalInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendGlobalMessage()}
-                  placeholder="Type message..."
-                  className="h-8 text-xs bg-neutral-800 border-neutral-700"
-                  disabled={globalCooldown > 0}
+                  placeholder={isMuted ? getMuteMessage() || "Muted" : "Type message..."}
+                  className={`h-8 text-xs bg-neutral-800 border-neutral-700 ${isMuted ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={globalCooldown > 0 || isMuted}
+                  title={isMuted ? muteReason || "You are muted" : ""}
                 />
                 <Button
                   onClick={sendGlobalMessage}
                   size="sm"
                   className="h-8 px-3 bg-amber-600 hover:bg-amber-700"
-                  disabled={globalCooldown > 0}
+                  disabled={globalCooldown > 0 || isMuted}
                 >
                   {globalCooldown > 0 ? (
                     <span className="text-[10px]">{globalCooldown}s</span>
@@ -391,6 +441,11 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
                   )}
                 </Button>
               </div>
+              {isMuted && (
+                <div className="text-[10px] text-orange-400 text-center">
+                  {muteReason || "You are muted and cannot send messages"}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="alliance" className="p-3 space-y-2">

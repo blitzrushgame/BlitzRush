@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
+import { requireAdminAuth } from "@/lib/admin/auth"
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const isAdminAuthenticated = cookieStore.get("admin_authenticated")?.value === "true"
-
-  if (!isAdminAuthenticated) {
+  const admin = await requireAdminAuth()
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -14,7 +12,9 @@ export async function GET() {
 
   const { data: users, error } = await supabase
     .from("users")
-    .select("id, username, ip_address, created_at")
+    .select(
+      "id, username, ip_address, created_at, is_banned, ban_type, ban_reason, banned_until, is_muted, mute_type, mute_reason, muted_until",
+    )
     .order("created_at", { ascending: false })
 
   if (error) {

@@ -53,6 +53,12 @@ export default function GamePage() {
       setUserId(Number(data.userId))
       const userResponse = await fetch(`/api/user/${data.userId}`)
       const userData = await userResponse.json()
+
+      if (userData.is_banned) {
+        router.push("/banned")
+        return
+      }
+
       setUsername(userData.username || "Player")
       setAllianceId(userData.alliance_id)
 
@@ -74,6 +80,11 @@ export default function GamePage() {
         }
 
         const userData = await userResponse.json()
+
+        if (userData.is_banned) {
+          router.push("/banned")
+          return
+        }
 
         if (userData && !userData.error && userData.alliance_id !== allianceId) {
           setAllianceId(userData.alliance_id)
@@ -205,7 +216,6 @@ export default function GamePage() {
         const initData = await initResponse.json()
         if (initData.homeBase) {
           console.log("[v0] Home base ready at:", initData.homeBase.x, initData.homeBase.y)
-          // Center camera on home base
           newState.camera.x = initData.homeBase.x
           newState.camera.y = initData.homeBase.y
         }

@@ -5,7 +5,6 @@ export async function GET(request: Request) {
   try {
     const supabase = createServiceRoleClient()
 
-    // Fetch messages with basic user data
     const { data: messages, error: messagesError } = await supabase
       .from("global_chat")
       .select("*")
@@ -21,10 +20,8 @@ export async function GET(request: Request) {
       return NextResponse.json([])
     }
 
-    // Get unique user IDs
     const userIds = [...new Set(messages.map((msg: any) => msg.user_id))]
 
-    // Fetch user data with alliance info
     const { data: users, error: usersError } = await supabase
       .from("users")
       .select("id, alliance_id, profile_picture")
@@ -34,7 +31,6 @@ export async function GET(request: Request) {
       console.error("[v0] Error fetching users:", usersError)
     }
 
-    // Fetch alliance data for users with alliances
     const allianceIds = users?.filter((u: any) => u.alliance_id).map((u: any) => u.alliance_id) || []
 
     let alliances: any[] = []
@@ -51,11 +47,9 @@ export async function GET(request: Request) {
       }
     }
 
-    // Create lookup maps
     const userMap = new Map(users?.map((u: any) => [u.id, u]) || [])
     const allianceMap = new Map(alliances.map((a: any) => [a.id, a]))
 
-    // Enrich messages with user and alliance data
     const messagesWithTags = messages.reverse().map((msg: any) => {
       const user = userMap.get(msg.user_id)
       const alliance = user?.alliance_id ? allianceMap.get(user.alliance_id) : null
@@ -88,6 +82,43 @@ export async function POST(request: Request) {
     }
 
     const supabase = createServiceRoleClient()
+
+    const { data: userData } = await supabase
+      .from("users")
+      .select("is_muted, mute_type, mute_reason, muted_until")
+      .eq("id", userId)
+      .single()
+
+    if (userData?.is_muted) {
+      // Check if temporary mute has expired
+      if (userData.mute_type === "temporary" && userData.muted_until) {
+        const expirationDate = new Date(userData.muted_until)
+        if (expirationDate < new Date()) {
+          // Mute has expired, remove it
+          await supabase
+            .from("users")
+            .update({
+              is_muted: false,
+              mute_type: null,
+              mute_reason: null,
+              muted_until: null,
+              muted_at: null,
+              muted_by_admin_id: null,
+            })
+            .eq("id", userId)
+        } else {
+          return NextResponse.json(
+            { error: userData.mute_reason || "You are muted and cannot send messages" },
+            { status: 403 },
+          )
+        }
+      } else {
+        return NextResponse.json(
+          { error: userData.mute_reason || "You are muted and cannot send messages" },
+          { status: 403 },
+        )
+      }
+    }
 
     const threeSecondsAgo = new Date(Date.now() - 3000).toISOString()
     const { data: recentMessages } = await supabase
