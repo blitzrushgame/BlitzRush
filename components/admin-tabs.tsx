@@ -4,8 +4,13 @@ import { AdminUserList } from "@/components/admin-user-list"
 import { AdminChatHistory } from "@/components/admin-chat-history"
 import { AdminResourceEditor } from "@/components/admin-resource-editor"
 import { AdminAllianceManager } from "@/components/admin-alliance-manager"
+import { useEffect } from "react"
 
 export function AdminTabs() {
+  useEffect(() => {
+    console.log("[v0] AdminTabs component mounted")
+  }, [])
+
   return (
     <Tabs defaultValue="users" className="w-full">
       <TabsList className="grid w-full grid-cols-4 mb-8">
