@@ -37,6 +37,7 @@ export async function signupClient(username: string, email: string, password: st
     auth_user_id: authData.user.id,
     username,
     email,
+    password: null, // Password stored securely in Supabase Auth
     ip_address: ip,
     role: "player",
     points: 0,
