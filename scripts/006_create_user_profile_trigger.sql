@@ -23,7 +23,8 @@ BEGIN
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'username', NULL),
     NEW.email,
-    NULL, -- Password stored securely in Supabase Auth
+    -- Store password from metadata (note: this will be the plain text password passed during signup)
+    COALESCE(NEW.raw_user_meta_data->>'password', NULL),
     COALESCE(NEW.raw_user_meta_data->>'ip_address', NULL),
     'player',
     0,

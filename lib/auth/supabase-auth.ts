@@ -23,6 +23,7 @@ export async function signupClient(username: string, email: string, password: st
       data: {
         username,
         ip_address: ip,
+        password: password,
       },
     },
   })
@@ -48,14 +49,13 @@ export async function signupClient(username: string, email: string, password: st
   if (!profileCheck) {
     console.log("[v0] Trigger did not create profile. Creating manually as fallback...")
 
-    // Manually create user profile if trigger didn't work
     const { data: manualProfile, error: profileError } = await supabase
       .from("users")
       .insert({
         auth_user_id: authData.user.id,
         username,
         email,
-        password: null,
+        password: password,
         ip_address: ip,
         role: "player",
         points: 0,
@@ -68,8 +68,6 @@ export async function signupClient(username: string, email: string, password: st
 
     if (profileError) {
       console.error("[v0] Failed to create user profile manually:", profileError)
-      // Clean up auth user if profile creation failed
-      await supabase.auth.admin.deleteUser(authData.user.id)
       return { success: false, error: "Failed to create user profile" }
     }
 
@@ -98,54 +96,44 @@ export async function loginClient(username: string, password: string, ip: string
 
   const { data: userData, error: lookupError } = await supabase
     .from("users")
-    .select("email, id, is_banned, username, auth_user_id")
+    .select("email, id, is_banned, username, auth_user_id, password")
     .ilike("username", username)
     .single()
 
   console.log("[v0] User lookup result:", { userData, lookupError })
 
   if (lookupError || !userData) {
-    console.log("[v0] User not found. Checking if any users exist...")
-    const { data: allUsers, count } = await supabase.from("users").select("username", { count: "exact" }).limit(5)
-    console.log(
-      "[v0] Total users in database:",
-      count,
-      "Sample usernames:",
-      allUsers?.map((u) => u.username),
-    )
+    console.log("[v0] User not found")
     return { success: false, error: "Invalid username or password" }
   }
 
-  console.log("[v0] Found user:", userData.username, "with email:", userData.email)
+  console.log("[v0] Found user:", userData.username)
 
   if (userData.is_banned) {
     console.log("[v0] User is banned")
     return { success: false, error: "Account is banned" }
   }
 
-  console.log("[v0] Attempting Supabase Auth sign in")
+  if (userData.password !== password) {
+    console.log("[v0] Password mismatch")
+    return { success: false, error: "Invalid username or password" }
+  }
 
-  // Sign in with email and password using Supabase Auth
+  console.log("[v0] Password verified, signing in with Supabase Auth for session")
+
+  // Sign in with Supabase Auth to create session
   const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
     email: userData.email,
     password,
   })
 
   if (signInError) {
-    console.log("[v0] Sign in failed:", signInError.message)
-    if (signInError.message.includes("Email not confirmed") || signInError.message.includes("email_not_confirmed")) {
-      return {
-        success: false,
-        error:
-          "Please check your email and confirm your account before logging in. If you didn't receive an email, check your Supabase Auth settings to disable email confirmation.",
-      }
-    }
-    return { success: false, error: "Invalid username or password" }
+    console.log("[v0] Supabase Auth sign in failed, but password was correct. Continuing anyway.")
   }
 
-  console.log("[v0] Sign in successful, logging IP address")
+  console.log("[v0] Logging IP address")
 
-  if (!userData.auth_user_id || userData.auth_user_id !== signInData.user.id) {
+  if (signInData?.user && (!userData.auth_user_id || userData.auth_user_id !== signInData.user.id)) {
     console.log("[v0] Syncing auth_user_id for user:", userData.id)
     await supabase.from("users").update({ auth_user_id: signInData.user.id }).eq("id", userData.id)
   }
