@@ -107,8 +107,11 @@ async function checkUserBan(userId: number): Promise<{ isBanned: boolean; reason
 }
 
 export async function signup(username: string, password: string, ipAddress: string) {
+  console.log("[v0] Starting signup process for username:", username)
+
   const ipBanCheck = await checkIPBan(ipAddress)
   if (ipBanCheck.isBanned) {
+    console.log("[v0] IP is banned:", ipAddress)
     return { success: false, error: "This IP address has been banned from creating accounts." }
   }
 
@@ -116,24 +119,40 @@ export async function signup(username: string, password: string, ipAddress: stri
 
   const vpnCheck = await checkVPN(ipAddress)
   if (vpnCheck.isVPN) {
+    console.log("[v0] VPN detected for IP:", ipAddress)
     return { success: false, error: "VPN or proxy detected. Please disable your VPN and try again." }
   }
 
   const { data: existingUser } = await supabase.from("users").select("id").ilike("username", username).maybeSingle()
 
   if (existingUser) {
+    console.log("[v0] Username already exists:", username)
     return { success: false, error: "Username already taken" }
   }
 
+  console.log("[v0] Attempting to insert new user into database")
   const { data: newUser, error } = await supabase
     .from("users")
-    .insert({ username, password, ip_address: ipAddress })
+    .insert({
+      username,
+      password,
+      ip_address: ipAddress,
+      email: null,
+      role: "player",
+      points: 0,
+      is_banned: false,
+      is_muted: false,
+      block_alliance_invites: false,
+    })
     .select()
     .single()
 
   if (error) {
-    return { success: false, error: error.message }
+    console.error("[v0] Database error during signup:", error)
+    return { success: false, error: `Database error: ${error.message}` }
   }
+
+  console.log("[v0] User created successfully with ID:", newUser.id)
 
   const cookieStore = await cookies()
   cookieStore.set("user_id", newUser.id.toString(), {
