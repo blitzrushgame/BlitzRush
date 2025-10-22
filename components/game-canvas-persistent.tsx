@@ -122,7 +122,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       homeBaseImg.onerror = () => {
         console.error("[v0] Failed to load home base")
       }
-      homeBaseImg.src = "/images/base/army-wars-base.png"
+      homeBaseImg.src = "/images/base/player-info-bar.png"
     }, [])
 
     useEffect(() => {

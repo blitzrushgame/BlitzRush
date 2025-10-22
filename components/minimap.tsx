@@ -41,7 +41,6 @@ export default function Minimap({
         if (response.ok) {
           const data = await response.json()
           if (data.homeBase && data.homeBase.world_id === currentMap) {
-            console.log("[v0] Home base location for minimap:", data.homeBase.x, data.homeBase.y)
             setHomeBaseLocation({ x: data.homeBase.x, y: data.homeBase.y })
           } else {
             setHomeBaseLocation(null)
@@ -75,8 +74,6 @@ export default function Minimap({
 
       const homeBaseMinimapX = minimapCenterX - homeBaseLocation.x * scale
       const homeBaseMinimapY = minimapCenterY - homeBaseLocation.y * scale
-
-      console.log("[v0] Drawing home base at minimap coords:", homeBaseMinimapX, homeBaseMinimapY)
 
       ctx.fillStyle = "#00ff00"
       ctx.beginPath()
