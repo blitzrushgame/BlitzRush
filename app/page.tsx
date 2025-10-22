@@ -68,8 +68,13 @@ export default function HomePage() {
         return
       }
 
-      console.log("[v0] Signup successful, redirecting to game")
-      router.push("/game")
+      console.log("[v0] Signup successful, showing login screen")
+      setIsSignUp(false)
+      setUsername("")
+      setPassword("")
+      setEmail("")
+      setError("Registration successful! Please log in.")
+      setLoading(false)
     } catch (err: any) {
       console.error("[v0] Signup error:", err)
       setError(err.message || "An error occurred during registration")
