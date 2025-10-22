@@ -137,6 +137,7 @@ export async function signup(username: string, password: string, ipAddress: stri
       username,
       password,
       ip_address: ipAddress,
+      auth_user_id: null,
       email: null,
       role: "player",
       points: 0,
