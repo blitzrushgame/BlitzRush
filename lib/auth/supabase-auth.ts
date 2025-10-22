@@ -6,8 +6,7 @@ export async function signupClient(username: string, email: string, password: st
 
   console.log("[v0] Starting signup process for username:", username)
 
-  // Check if username already exists
-  const { data: existingUser } = await supabase.from("users").select("id").eq("username", username).single()
+  const { data: existingUser } = await supabase.from("users").select("id").ilike("username", username).single()
 
   if (existingUser) {
     console.log("[v0] Username already exists")
@@ -35,7 +34,21 @@ export async function signupClient(username: string, email: string, password: st
   }
 
   console.log("[v0] Auth user created with ID:", authData.user.id)
-  console.log("[v0] Database trigger will automatically create user profile")
+  console.log("[v0] Database trigger should automatically create user profile")
+
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+
+  const { data: profileCheck } = await supabase
+    .from("users")
+    .select("id, username, email")
+    .eq("auth_user_id", authData.user.id)
+    .single()
+
+  console.log("[v0] Profile verification:", profileCheck)
+
+  if (!profileCheck) {
+    console.error("[v0] WARNING: User profile was not created by trigger. This may cause login issues.")
+  }
 
   return { success: true }
 }
@@ -46,28 +59,34 @@ export async function loginClient(username: string, password: string, ip: string
 
   console.log("[v0] Looking up user by username:", username)
 
-  // Look up email from username
   const { data: userData, error: lookupError } = await supabase
     .from("users")
-    .select("email, id, is_banned")
-    .eq("username", username)
+    .select("email, id, is_banned, username")
+    .ilike("username", username)
     .single()
 
   console.log("[v0] User lookup result:", { userData, lookupError })
 
   if (lookupError || !userData) {
-    console.log("[v0] User not found or lookup error")
+    console.log("[v0] User not found. Checking if any users exist...")
+    const { data: allUsers, count } = await supabase.from("users").select("username", { count: "exact" }).limit(5)
+    console.log(
+      "[v0] Total users in database:",
+      count,
+      "Sample usernames:",
+      allUsers?.map((u) => u.username),
+    )
     return { success: false, error: "Invalid username or password" }
   }
 
-  console.log("[v0] Found user with email:", userData.email)
+  console.log("[v0] Found user:", userData.username, "with email:", userData.email)
 
   if (userData.is_banned) {
     console.log("[v0] User is banned")
     return { success: false, error: "Account is banned" }
   }
 
-  console.log("[v0] Attempting Supabase Auth sign in with email:", userData.email)
+  console.log("[v0] Attempting Supabase Auth sign in")
 
   // Sign in with email and password using Supabase Auth
   const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -75,16 +94,13 @@ export async function loginClient(username: string, password: string, ip: string
     password,
   })
 
-  console.log("[v0] Sign in result:", { signInData, signInError })
-
   if (signInError) {
     console.log("[v0] Sign in failed:", signInError.message)
     return { success: false, error: "Invalid username or password" }
   }
 
-  console.log("[v0] Sign in successful, tracking IP")
+  console.log("[v0] Sign in successful, logging IP address")
 
-  // Track login IP
   const { data: ipHistory } = await supabase
     .from("user_ip_history")
     .select("id, access_count")
@@ -93,7 +109,6 @@ export async function loginClient(username: string, password: string, ip: string
     .single()
 
   if (ipHistory) {
-    // Update existing IP record
     await supabase
       .from("user_ip_history")
       .update({
@@ -102,7 +117,6 @@ export async function loginClient(username: string, password: string, ip: string
       })
       .eq("id", ipHistory.id)
   } else {
-    // Create new IP record
     await supabase.from("user_ip_history").insert({
       user_id: userData.id,
       ip_address: ip,
