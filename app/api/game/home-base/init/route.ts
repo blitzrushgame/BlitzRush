@@ -33,8 +33,8 @@ export async function POST(request: Request) {
       })
     }
 
-    const x = Math.floor(Math.random() * (WORLD_SIZE_TILES - 400)) + 200 // 200 to 4800 range
-    const y = Math.floor(Math.random() * (WORLD_SIZE_TILES - 400)) + 200 // 200 to 4800 range
+    const x = Math.floor(Math.random() * (WORLD_SIZE_TILES - 200)) + 100 // 100 to 1900 range
+    const y = Math.floor(Math.random() * (WORLD_SIZE_TILES - 200)) + 100 // 100 to 1900 range
 
     console.log("[v0] Creating new home base at tile coords:", { x, y })
 

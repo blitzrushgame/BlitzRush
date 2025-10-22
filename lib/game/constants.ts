@@ -1,5 +1,5 @@
 // Game world constants - pure tile-based system
-export const WORLD_SIZE_TILES = 5000 // World is 5000x5000 tiles
+export const WORLD_SIZE_TILES = 2000 // World is 2000x2000 tiles
 export const TILE_SIZE_PX = 64 // Each tile is 64px for rendering
 export const GRASS_TILE_RADIUS = 10 // Each grass PNG covers 10x10 tiles
 export const GRASS_PNG_SIZE_TILES = GRASS_TILE_RADIUS * 2 // 20x20 tiles per grass PNG

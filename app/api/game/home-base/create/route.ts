@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (x === undefined || y === undefined) {
-      x = Math.floor(Math.random() * (WORLD_SIZE_TILES - 400)) + 200 // 200 to 4800 range
-      y = Math.floor(Math.random() * (WORLD_SIZE_TILES - 400)) + 200 // 200 to 4800 range
+      x = Math.floor(Math.random() * (WORLD_SIZE_TILES - 200)) + 100 // 100 to 1900 range
+      y = Math.floor(Math.random() * (WORLD_SIZE_TILES - 200)) + 100 // 100 to 1900 range
       console.log("[v0] Generated random tile position:", { x, y })
     }
 
