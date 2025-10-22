@@ -28,14 +28,79 @@ export async function signupClient(username: string, email: string, password: st
     },
   })
 
-  if (authError || !authData.user) {
-    console.error("[v0] Auth error:", authError)
-    return { success: false, error: authError?.message || "Failed to create account" }
+  if (authError) {
+    console.error("[v0] Auth error details:", authError)
+
+    // Check if error is because user already exists
+    if (authError.message?.includes("already registered") || authError.message?.includes("already been registered")) {
+      console.log("[v0] Auth user exists, checking if profile exists...")
+
+      // Try to find existing auth user and create profile for them
+      const { data: signInData } = await supabase.auth.signInWithPassword({ email, password })
+
+      if (signInData?.user) {
+        console.log("[v0] Found existing auth user, checking for profile...")
+
+        const { data: existingProfile } = await supabase
+          .from("users")
+          .select("id")
+          .eq("auth_user_id", signInData.user.id)
+          .single()
+
+        if (!existingProfile) {
+          console.log("[v0] No profile found, creating profile for existing auth user...")
+
+          const { data: newProfile, error: profileError } = await supabase
+            .from("users")
+            .insert({
+              auth_user_id: signInData.user.id,
+              username,
+              email,
+              password: password,
+              ip_address: ip,
+              role: "player",
+              points: 0,
+              is_banned: false,
+              is_muted: false,
+              block_alliance_invites: false,
+            })
+            .select("id")
+            .single()
+
+          if (profileError) {
+            console.error("[v0] Failed to create profile for existing auth user:", profileError)
+            return { success: false, error: `Failed to create profile: ${profileError.message}` }
+          }
+
+          console.log("[v0] Profile created successfully for existing auth user")
+
+          // Track registration IP
+          await supabase.from("user_ip_history").insert({
+            user_id: newProfile.id,
+            ip_address: ip,
+            access_count: 1,
+          })
+
+          return { success: true }
+        } else {
+          console.log("[v0] Profile already exists for this auth user")
+          return { success: false, error: "User already registered" }
+        }
+      }
+    }
+
+    return { success: false, error: authError.message || "Failed to create account" }
+  }
+
+  if (!authData.user) {
+    console.error("[v0] No auth user returned")
+    return { success: false, error: "Failed to create account" }
   }
 
   console.log("[v0] Auth user created with ID:", authData.user.id)
   console.log("[v0] Waiting for database trigger to create user profile...")
 
+  // Wait for trigger to create profile
   await new Promise((resolve) => setTimeout(resolve, 2000))
 
   const { data: profileCheck } = await supabase
@@ -75,7 +140,7 @@ export async function signupClient(username: string, email: string, password: st
       })
       return {
         success: false,
-        error: `Database error: ${profileError.message}${profileError.details ? " - " + profileError.details : ""}`,
+        error: `Database error: ${profileError.message}${profileError.details ? " - " + profileError.details : ""}${profileError.hint ? " (Hint: " + profileError.hint + ")" : ""}`,
       }
     }
 
