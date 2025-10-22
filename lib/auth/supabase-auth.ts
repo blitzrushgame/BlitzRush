@@ -14,13 +14,18 @@ export async function signupClient(username: string, email: string, password: st
     return { success: false, error: "Username already taken" }
   }
 
-  console.log("[v0] Creating Supabase Auth user...")
-  // Create Supabase Auth user
+  console.log("[v0] Creating Supabase Auth user with metadata...")
+  // Create Supabase Auth user with metadata
+  // The database trigger will automatically create the user profile
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
     options: {
       emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/game`,
+      data: {
+        username,
+        ip_address: ip,
+      },
     },
   })
 
@@ -30,43 +35,8 @@ export async function signupClient(username: string, email: string, password: st
   }
 
   console.log("[v0] Auth user created with ID:", authData.user.id)
+  console.log("[v0] Database trigger will automatically create user profile")
 
-  // Create user record in public.users table
-  console.log("[v0] Creating user profile in public.users table...")
-  const { error: userError } = await supabase.from("users").insert({
-    auth_user_id: authData.user.id,
-    username,
-    email,
-    password: null, // Password stored securely in Supabase Auth
-    ip_address: ip,
-    role: "player",
-    points: 0,
-    is_banned: false,
-    is_muted: false,
-    block_alliance_invites: false,
-  })
-
-  if (userError) {
-    console.error("[v0] User profile creation error:", userError)
-    console.error("[v0] Error details:", JSON.stringify(userError, null, 2))
-    return { success: false, error: `Failed to create user profile: ${userError.message}` }
-  }
-
-  console.log("[v0] User profile created successfully")
-
-  // Track registration IP
-  const { data: userData } = await supabase.from("users").select("id").eq("auth_user_id", authData.user.id).single()
-
-  if (userData) {
-    console.log("[v0] Tracking registration IP...")
-    await supabase.from("user_ip_history").insert({
-      user_id: userData.id,
-      ip_address: ip,
-      access_count: 1,
-    })
-  }
-
-  console.log("[v0] Signup completed successfully")
   return { success: true }
 }
 
