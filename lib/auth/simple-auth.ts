@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
+import bcrypt from "bcryptjs"
 
 async function checkVPN(ipAddress: string): Promise<{ isVPN: boolean; error?: string }> {
   const apiKey = process.env.IPHUB_API_KEY
@@ -106,8 +107,52 @@ async function checkUserBan(userId: number): Promise<{ isBanned: boolean; reason
   }
 }
 
-export async function signup(username: string, password: string, ipAddress: string) {
+async function trackIPAddress(userId: number, ipAddress: string) {
+  const supabase = createServiceRoleClient()
+
+  const { data: existing } = await supabase
+    .from("user_ip_history")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("ip_address", ipAddress)
+    .maybeSingle()
+
+  if (existing) {
+    // Update existing record
+    await supabase
+      .from("user_ip_history")
+      .update({
+        last_seen: new Date().toISOString(),
+        access_count: existing.access_count + 1,
+      })
+      .eq("id", existing.id)
+  } else {
+    // Create new record
+    await supabase.from("user_ip_history").insert({
+      user_id: userId,
+      ip_address: ipAddress,
+      first_seen: new Date().toISOString(),
+      last_seen: new Date().toISOString(),
+      access_count: 1,
+    })
+  }
+}
+
+export async function signup(username: string, email: string, password: string, ipAddress: string) {
   console.log("[v0] Starting signup process for username:", username)
+
+  // Validate inputs
+  if (!username || username.length < 3) {
+    return { success: false, error: "Username must be at least 3 characters long" }
+  }
+
+  if (!email || !email.includes("@")) {
+    return { success: false, error: "Valid email is required" }
+  }
+
+  if (!password || password.length < 6) {
+    return { success: false, error: "Password must be at least 6 characters long" }
+  }
 
   const ipBanCheck = await checkIPBan(ipAddress)
   if (ipBanCheck.isBanned) {
@@ -123,6 +168,7 @@ export async function signup(username: string, password: string, ipAddress: stri
     return { success: false, error: "VPN or proxy detected. Please disable your VPN and try again." }
   }
 
+  // Check if username already exists
   const { data: existingUser } = await supabase.from("users").select("id").ilike("username", username).maybeSingle()
 
   if (existingUser) {
@@ -130,15 +176,26 @@ export async function signup(username: string, password: string, ipAddress: stri
     return { success: false, error: "Username already taken" }
   }
 
+  // Check if email already exists
+  const { data: existingEmail } = await supabase.from("users").select("id").ilike("email", email).maybeSingle()
+
+  if (existingEmail) {
+    console.log("[v0] Email already exists:", email)
+    return { success: false, error: "Email already registered" }
+  }
+
+  // Hash password
+  const hashedPassword = await bcrypt.hash(password, 10)
+
   console.log("[v0] Attempting to insert new user into database")
   const { data: newUser, error } = await supabase
     .from("users")
     .insert({
       username,
-      password,
+      email,
+      password: hashedPassword,
       ip_address: ipAddress,
       auth_user_id: null,
-      email: null,
       role: "player",
       points: 0,
       is_banned: false,
@@ -155,6 +212,9 @@ export async function signup(username: string, password: string, ipAddress: stri
 
   console.log("[v0] User created successfully with ID:", newUser.id)
 
+  // Track registration IP
+  await trackIPAddress(newUser.id, ipAddress)
+
   const cookieStore = await cookies()
   cookieStore.set("user_id", newUser.id.toString(), {
     httpOnly: true,
@@ -166,17 +226,18 @@ export async function signup(username: string, password: string, ipAddress: stri
   return { success: true, userId: newUser.id }
 }
 
-export async function login(username: string, password: string) {
+export async function login(username: string, password: string, ipAddress: string) {
   const supabase = createServiceRoleClient()
 
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("*")
-    .ilike("username", username)
-    .eq("password", password)
-    .maybeSingle()
+  const { data: user, error } = await supabase.from("users").select("*").ilike("username", username).maybeSingle()
 
   if (error || !user) {
+    return { success: false, error: "Invalid username or password" }
+  }
+
+  // Verify password
+  const passwordMatch = await bcrypt.compare(password, user.password)
+  if (!passwordMatch) {
     return { success: false, error: "Invalid username or password" }
   }
 
@@ -185,10 +246,13 @@ export async function login(username: string, password: string) {
     return { success: false, error: "banned", userId: user.id }
   }
 
-  const ipBanCheck = await checkIPBan(user.ip_address)
+  const ipBanCheck = await checkIPBan(ipAddress)
   if (ipBanCheck.isBanned) {
     return { success: false, error: "This IP address has been banned." }
   }
+
+  // Track login IP
+  await trackIPAddress(user.id, ipAddress)
 
   const cookieStore = await cookies()
   cookieStore.set("user_id", user.id.toString(), {
