@@ -98,7 +98,7 @@ export async function loginClient(username: string, password: string, ip: string
 
   const { data: userData, error: lookupError } = await supabase
     .from("users")
-    .select("email, id, is_banned, username")
+    .select("email, id, is_banned, username, auth_user_id")
     .ilike("username", username)
     .single()
 
@@ -137,6 +137,11 @@ export async function loginClient(username: string, password: string, ip: string
   }
 
   console.log("[v0] Sign in successful, logging IP address")
+
+  if (!userData.auth_user_id || userData.auth_user_id !== signInData.user.id) {
+    console.log("[v0] Syncing auth_user_id for user:", userData.id)
+    await supabase.from("users").update({ auth_user_id: signInData.user.id }).eq("id", userData.id)
+  }
 
   const { data: ipHistory } = await supabase
     .from("user_ip_history")
