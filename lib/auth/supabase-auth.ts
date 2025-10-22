@@ -44,6 +44,8 @@ export async function signupClient(username: string, email: string, password: st
 export async function loginClient(username: string, password: string, ip: string) {
   const supabase = createBrowserClient()
 
+  console.log("[v0] Looking up user by username:", username)
+
   // Look up email from username
   const { data: userData, error: lookupError } = await supabase
     .from("users")
@@ -51,23 +53,36 @@ export async function loginClient(username: string, password: string, ip: string
     .eq("username", username)
     .single()
 
+  console.log("[v0] User lookup result:", { userData, lookupError })
+
   if (lookupError || !userData) {
+    console.log("[v0] User not found or lookup error")
     return { success: false, error: "Invalid username or password" }
   }
 
+  console.log("[v0] Found user with email:", userData.email)
+
   if (userData.is_banned) {
+    console.log("[v0] User is banned")
     return { success: false, error: "Account is banned" }
   }
 
+  console.log("[v0] Attempting Supabase Auth sign in with email:", userData.email)
+
   // Sign in with email and password using Supabase Auth
-  const { error: signInError } = await supabase.auth.signInWithPassword({
+  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
     email: userData.email,
     password,
   })
 
+  console.log("[v0] Sign in result:", { signInData, signInError })
+
   if (signInError) {
+    console.log("[v0] Sign in failed:", signInError.message)
     return { success: false, error: "Invalid username or password" }
   }
+
+  console.log("[v0] Sign in successful, tracking IP")
 
   // Track login IP
   const { data: ipHistory } = await supabase
@@ -95,5 +110,6 @@ export async function loginClient(username: string, password: string, ip: string
     })
   }
 
+  console.log("[v0] Login complete")
   return { success: true }
 }
