@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { WORLD_SIZE_TILES } from "@/lib/game/constants"
+import { WORLD_SIZE_TILES, CAMERA_VIEWING_RADIUS_TILES } from "@/lib/game/constants"
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,8 +34,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (x === undefined || y === undefined) {
-      x = Math.floor(Math.random() * (WORLD_SIZE_TILES - 200)) + 100 // 100 to 1900 range
-      y = Math.floor(Math.random() * (WORLD_SIZE_TILES - 200)) + 100 // 100 to 1900 range
+      const centerTile = WORLD_SIZE_TILES / 2 // 1000
+      const spawnRadius = CAMERA_VIEWING_RADIUS_TILES // 15 tiles
+      x = Math.floor(centerTile + (Math.random() * spawnRadius * 2 - spawnRadius))
+      y = Math.floor(centerTile + (Math.random() * spawnRadius * 2 - spawnRadius))
       console.log("[v0] Generated random tile position:", { x, y })
     }
 

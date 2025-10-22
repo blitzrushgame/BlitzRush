@@ -10,6 +10,7 @@ export const DEFAULT_ZOOM = 1.0
 export const MIN_ZOOM = 0.5
 export const MAX_ZOOM = 3.0
 export const CAMERA_MOVE_SPEED = 10 // tiles per frame when using WASD
+export const CAMERA_VIEWING_RADIUS_TILES = 15 // Approximate tiles visible from camera center
 
 // Coordinate conversion helpers
 export function tilesToPixels(tiles: number): number {
