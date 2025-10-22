@@ -2,7 +2,6 @@
 
 import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import bcrypt from "bcryptjs"
 
 async function checkVPN(ipAddress: string): Promise<{ isVPN: boolean; error?: string }> {
   const apiKey = process.env.IPHUB_API_KEY
@@ -184,16 +183,13 @@ export async function signup(username: string, email: string, password: string, 
     return { success: false, error: "Email already registered" }
   }
 
-  // Hash password
-  const hashedPassword = await bcrypt.hash(password, 10)
-
   console.log("[v0] Attempting to insert new user into database")
   const { data: newUser, error } = await supabase
     .from("users")
     .insert({
       username,
       email,
-      password: hashedPassword,
+      password: password, // Store password as-is
       ip_address: ipAddress,
       auth_user_id: null,
       role: "player",
@@ -235,9 +231,7 @@ export async function login(username: string, password: string, ipAddress: strin
     return { success: false, error: "Invalid username or password" }
   }
 
-  // Verify password
-  const passwordMatch = await bcrypt.compare(password, user.password)
-  if (!passwordMatch) {
+  if (user.password !== password) {
     return { success: false, error: "Invalid username or password" }
   }
 

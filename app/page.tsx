@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { signUpWithUsername, signInWithUsername } from "@/lib/auth/supabase-auth"
+import { signup, login } from "@/lib/auth/simple-auth"
 
 export default function HomePage() {
   const router = useRouter()
@@ -32,7 +32,13 @@ export default function HomePage() {
       const { ip } = await ipRes.json()
 
       console.log("[v0] Attempting login with username:", username)
-      await signInWithUsername(username, password, ip)
+      const result = await login(username, password, ip)
+
+      if (!result.success) {
+        setError(result.error || "Login failed")
+        setLoading(false)
+        return
+      }
 
       console.log("[v0] Login successful, redirecting to game")
       router.push("/game")
@@ -54,7 +60,13 @@ export default function HomePage() {
       const { ip } = await ipRes.json()
 
       console.log("[v0] Attempting signup with username:", username)
-      await signUpWithUsername(username, email, password, ip)
+      const result = await signup(username, email, password, ip)
+
+      if (!result.success) {
+        setError(result.error || "Registration failed")
+        setLoading(false)
+        return
+      }
 
       console.log("[v0] Signup successful, redirecting to game")
       router.push("/game")
