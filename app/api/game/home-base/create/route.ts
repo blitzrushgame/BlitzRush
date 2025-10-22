@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (x === undefined || y === undefined) {
-      x = Math.floor(Math.random() * 8000) + 1000
-      y = Math.floor(Math.random() * 8000) + 1000
+      x = Math.floor(Math.random() * 1800) + 100 // 100-1900 range
+      y = Math.floor(Math.random() * 1800) + 100 // 100-1900 range
       console.log("[v0] Generated random position:", { x, y })
     }
 

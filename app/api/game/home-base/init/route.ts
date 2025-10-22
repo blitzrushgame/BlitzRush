@@ -33,8 +33,8 @@ export async function POST(request: Request) {
     }
 
     // Generate random position for new home base
-    const x = Math.floor(Math.random() * 8000) + 1000
-    const y = Math.floor(Math.random() * 8000) + 1000
+    const x = Math.floor(Math.random() * 1800) + 100 // 100-1900 range
+    const y = Math.floor(Math.random() * 1800) + 100 // 100-1900 range
 
     console.log("[v0] Creating new home base at:", { x, y })
 
