@@ -4,13 +4,17 @@ import { createBrowserClient } from "@/lib/supabase/client"
 export async function signupClient(username: string, email: string, password: string, ip: string) {
   const supabase = createBrowserClient()
 
+  console.log("[v0] Starting signup process for username:", username)
+
   // Check if username already exists
   const { data: existingUser } = await supabase.from("users").select("id").eq("username", username).single()
 
   if (existingUser) {
+    console.log("[v0] Username already exists")
     return { success: false, error: "Username already taken" }
   }
 
+  console.log("[v0] Creating Supabase Auth user...")
   // Create Supabase Auth user
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
@@ -21,10 +25,14 @@ export async function signupClient(username: string, email: string, password: st
   })
 
   if (authError || !authData.user) {
+    console.error("[v0] Auth error:", authError)
     return { success: false, error: authError?.message || "Failed to create account" }
   }
 
+  console.log("[v0] Auth user created with ID:", authData.user.id)
+
   // Create user record in public.users table
+  console.log("[v0] Creating user profile in public.users table...")
   const { error: userError } = await supabase.from("users").insert({
     auth_user_id: authData.user.id,
     username,
@@ -38,13 +46,18 @@ export async function signupClient(username: string, email: string, password: st
   })
 
   if (userError) {
-    return { success: false, error: "Failed to create user profile" }
+    console.error("[v0] User profile creation error:", userError)
+    console.error("[v0] Error details:", JSON.stringify(userError, null, 2))
+    return { success: false, error: `Failed to create user profile: ${userError.message}` }
   }
+
+  console.log("[v0] User profile created successfully")
 
   // Track registration IP
   const { data: userData } = await supabase.from("users").select("id").eq("auth_user_id", authData.user.id).single()
 
   if (userData) {
+    console.log("[v0] Tracking registration IP...")
     await supabase.from("user_ip_history").insert({
       user_id: userData.id,
       ip_address: ip,
@@ -52,6 +65,7 @@ export async function signupClient(username: string, email: string, password: st
     })
   }
 
+  console.log("[v0] Signup completed successfully")
   return { success: true }
 }
 
