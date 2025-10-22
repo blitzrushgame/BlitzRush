@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { signup, login } from "@/lib/auth/simple-auth"
+import { signUpWithUsername, signInWithUsername } from "@/lib/auth/supabase-auth"
 
 export default function HomePage() {
   const router = useRouter()
@@ -27,20 +27,18 @@ export default function HomePage() {
     setError("")
 
     try {
+      console.log("[v0] Getting IP address")
       const ipRes = await fetch("/api/get-ip")
       const { ip } = await ipRes.json()
 
-      const result = await login(username, password, ip)
+      console.log("[v0] Attempting login with username:", username)
+      await signInWithUsername(username, password, ip)
 
-      if (!result.success) {
-        setError(result.error || "Login failed")
-        setLoading(false)
-        return
-      }
-
+      console.log("[v0] Login successful, redirecting to game")
       router.push("/game")
-    } catch (err) {
-      setError("An error occurred during login")
+    } catch (err: any) {
+      console.error("[v0] Login error:", err)
+      setError(err.message || "An error occurred during login")
       setLoading(false)
     }
   }
@@ -51,20 +49,18 @@ export default function HomePage() {
     setError("")
 
     try {
+      console.log("[v0] Getting IP address")
       const ipRes = await fetch("/api/get-ip")
       const { ip } = await ipRes.json()
 
-      const result = await signup(username, email, password, ip)
+      console.log("[v0] Attempting signup with username:", username)
+      await signUpWithUsername(username, email, password, ip)
 
-      if (!result.success) {
-        setError(result.error || "Registration failed")
-        setLoading(false)
-        return
-      }
-
+      console.log("[v0] Signup successful, redirecting to game")
       router.push("/game")
-    } catch (err) {
-      setError("An error occurred during registration")
+    } catch (err: any) {
+      console.error("[v0] Signup error:", err)
+      setError(err.message || "An error occurred during registration")
       setLoading(false)
     }
   }
