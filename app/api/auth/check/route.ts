@@ -14,12 +14,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ authenticated: false })
   }
 
-  if (!user.email_confirmed_at) {
-    return NextResponse.json({
-      authenticated: false,
-      error: "Please verify your email before logging in. Check your inbox for the verification link.",
-    })
-  }
+  // Users can log in immediately without email verification
 
   const serviceSupabase = createServiceRoleClient()
   const { data: userData, error: userError } = await serviceSupabase
@@ -29,6 +24,10 @@ export async function GET(request: Request) {
     .maybeSingle()
 
   if (userError || !userData) {
+    console.error("[v0] Auth check failed - user not found in database:", {
+      auth_user_id: user.id,
+      error: userError,
+    })
     return NextResponse.json({
       authenticated: false,
       error: "Account not found. Please sign up first.",
