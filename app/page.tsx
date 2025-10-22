@@ -73,7 +73,7 @@ export default function HomePage() {
       setUsername("")
       setPassword("")
       setEmail("")
-      setError("Registration successful! Please log in.")
+      setError("SUCCESS: Registration successful! Please log in.")
       setLoading(false)
     } catch (err: any) {
       console.error("[v0] Signup error:", err)
@@ -166,7 +166,11 @@ export default function HomePage() {
                 />
               </div>
 
-              {error && <p className="text-red-400 text-sm">{error}</p>}
+              {error && (
+                <p className={error.startsWith("SUCCESS:") ? "text-green-400 text-sm" : "text-red-400 text-sm"}>
+                  {error.replace("SUCCESS: ", "")}
+                </p>
+              )}
 
               <button
                 type="submit"

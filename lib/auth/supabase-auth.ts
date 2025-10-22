@@ -133,6 +133,13 @@ export async function loginClient(username: string, password: string, ip: string
 
   if (signInError) {
     console.log("[v0] Sign in failed:", signInError.message)
+    if (signInError.message.includes("Email not confirmed") || signInError.message.includes("email_not_confirmed")) {
+      return {
+        success: false,
+        error:
+          "Please check your email and confirm your account before logging in. If you didn't receive an email, check your Supabase Auth settings to disable email confirmation.",
+      }
+    }
     return { success: false, error: "Invalid username or password" }
   }
 
