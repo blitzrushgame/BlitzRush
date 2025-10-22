@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { signup } from "@/lib/auth/simple-auth"
+import { signupClient } from "@/lib/auth/supabase-auth"
 import Link from "next/link"
 
 export default function SignUpPage() {
@@ -44,7 +44,7 @@ export default function SignUpPage() {
     const ipAddress = await getUserIP()
     console.log("[v0] Attempting signup with IP:", ipAddress)
 
-    const result = await signup(username, password, ipAddress)
+    const result = await signupClient(username, `${username}@blitzrush.local`, password, ipAddress)
 
     if (!result.success) {
       if (result.error?.includes("banned")) {

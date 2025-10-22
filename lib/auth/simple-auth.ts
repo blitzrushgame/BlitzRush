@@ -1,280 +1,88 @@
-"use server"
+import { createClient } from "@/lib/supabase/server"
 
-import { cookies } from "next/headers"
-import { createServiceRoleClient } from "@/lib/supabase/service-role"
-
-async function checkVPN(ipAddress: string): Promise<{ isVPN: boolean; error?: string }> {
-  const apiKey = process.env.IPHUB_API_KEY
-
-  if (!apiKey) {
-    console.warn("[v0] IPHub API key not configured, skipping VPN check")
-    return { isVPN: false }
-  }
-
-  try {
-    const response = await fetch(`https://v2.api.iphub.info/ip/${ipAddress}`, {
-      headers: {
-        "X-Key": apiKey,
-      },
-    })
-
-    if (!response.ok) {
-      console.error("[v0] IPHub API error:", response.status)
-      return { isVPN: false }
-    }
-
-    const data = await response.json()
-
-    if (data.block === 1) {
-      return { isVPN: true }
-    }
-
-    return { isVPN: false }
-  } catch (error) {
-    console.error("[v0] IPHub check failed:", error)
-    return { isVPN: false }
-  }
-}
-
-async function checkIPBan(ipAddress: string): Promise<{ isBanned: boolean; reason?: string; bannedUntil?: Date }> {
-  const supabase = createServiceRoleClient()
-
-  const { data: bannedIP } = await supabase
-    .from("banned_ips")
-    .select("ban_type, reason, banned_until")
-    .eq("ip_address", ipAddress)
-    .maybeSingle()
-
-  if (!bannedIP) {
-    return { isBanned: false }
-  }
-
-  // Check if temporary ban has expired
-  if (bannedIP.ban_type === "temporary" && bannedIP.banned_until) {
-    const expirationDate = new Date(bannedIP.banned_until)
-    if (expirationDate < new Date()) {
-      // Ban has expired, remove it
-      await supabase.from("banned_ips").delete().eq("ip_address", ipAddress)
-      return { isBanned: false }
-    }
-  }
-
-  return {
-    isBanned: true,
-    reason: bannedIP.reason,
-    bannedUntil: bannedIP.banned_until ? new Date(bannedIP.banned_until) : undefined,
-  }
-}
-
-async function checkUserBan(userId: number): Promise<{ isBanned: boolean; reason?: string; bannedUntil?: Date }> {
-  const supabase = createServiceRoleClient()
-
-  const { data: user } = await supabase
-    .from("users")
-    .select("is_banned, ban_type, ban_reason, banned_until")
-    .eq("id", userId)
-    .maybeSingle()
-
-  if (!user || !user.is_banned) {
-    return { isBanned: false }
-  }
-
-  // Check if temporary ban has expired
-  if (user.ban_type === "temporary" && user.banned_until) {
-    const expirationDate = new Date(user.banned_until)
-    if (expirationDate < new Date()) {
-      // Ban has expired, remove it
-      await supabase
-        .from("users")
-        .update({
-          is_banned: false,
-          ban_type: null,
-          ban_reason: null,
-          banned_until: null,
-          banned_at: null,
-          banned_by_admin_id: null,
-        })
-        .eq("id", userId)
-      return { isBanned: false }
-    }
-  }
-
-  return {
-    isBanned: true,
-    reason: user.ban_reason || undefined,
-    bannedUntil: user.banned_until ? new Date(user.banned_until) : undefined,
-  }
-}
-
-async function trackIPAddress(userId: number, ipAddress: string) {
-  const supabase = createServiceRoleClient()
-
-  const { data: existing } = await supabase
-    .from("user_ip_history")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("ip_address", ipAddress)
-    .maybeSingle()
-
-  if (existing) {
-    // Update existing record
-    await supabase
-      .from("user_ip_history")
-      .update({
-        last_seen: new Date().toISOString(),
-        access_count: existing.access_count + 1,
-      })
-      .eq("id", existing.id)
-  } else {
-    // Create new record
-    await supabase.from("user_ip_history").insert({
-      user_id: userId,
-      ip_address: ipAddress,
-      first_seen: new Date().toISOString(),
-      last_seen: new Date().toISOString(),
-      access_count: 1,
-    })
-  }
-}
-
-export async function signup(username: string, email: string, password: string, ipAddress: string) {
-  console.log("[v0] Starting signup process for username:", username)
-
-  // Validate inputs
-  if (!username || username.length < 3) {
-    return { success: false, error: "Username must be at least 3 characters long" }
-  }
-
-  if (!email || !email.includes("@")) {
-    return { success: false, error: "Valid email is required" }
-  }
-
-  if (!password || password.length < 6) {
-    return { success: false, error: "Password must be at least 6 characters long" }
-  }
-
-  const ipBanCheck = await checkIPBan(ipAddress)
-  if (ipBanCheck.isBanned) {
-    console.log("[v0] IP is banned:", ipAddress)
-    return { success: false, error: "This IP address has been banned from creating accounts." }
-  }
-
-  const supabase = createServiceRoleClient()
-
-  const vpnCheck = await checkVPN(ipAddress)
-  if (vpnCheck.isVPN) {
-    console.log("[v0] VPN detected for IP:", ipAddress)
-    return { success: false, error: "VPN or proxy detected. Please disable your VPN and try again." }
-  }
-
-  // Check if username already exists
-  const { data: existingUser } = await supabase.from("users").select("id").ilike("username", username).maybeSingle()
-
-  if (existingUser) {
-    console.log("[v0] Username already exists:", username)
-    return { success: false, error: "Username already taken" }
-  }
-
-  // Check if email already exists
-  const { data: existingEmail } = await supabase.from("users").select("id").ilike("email", email).maybeSingle()
-
-  if (existingEmail) {
-    console.log("[v0] Email already exists:", email)
-    return { success: false, error: "Email already registered" }
-  }
-
-  console.log("[v0] Attempting to insert new user into database")
-  const { data: newUser, error } = await supabase
-    .from("users")
-    .insert({
-      username,
-      email,
-      password: password, // Store password as-is
-      ip_address: ipAddress,
-      auth_user_id: null,
-      role: "player",
-      points: 0,
-      is_banned: false,
-      is_muted: false,
-      block_alliance_invites: false,
-    })
-    .select()
-    .single()
-
-  if (error) {
-    console.error("[v0] Database error during signup:", error)
-    return { success: false, error: `Database error: ${error.message}` }
-  }
-
-  console.log("[v0] User created successfully with ID:", newUser.id)
-
-  // Track registration IP
-  await trackIPAddress(newUser.id, ipAddress)
-
-  const cookieStore = await cookies()
-  cookieStore.set("user_id", newUser.id.toString(), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
-  })
-
-  return { success: true, userId: newUser.id }
-}
-
-export async function login(username: string, password: string, ipAddress: string) {
-  const supabase = createServiceRoleClient()
-
-  const { data: user, error } = await supabase.from("users").select("*").ilike("username", username).maybeSingle()
-
-  if (error || !user) {
-    return { success: false, error: "Invalid username or password" }
-  }
-
-  if (user.password !== password) {
-    return { success: false, error: "Invalid username or password" }
-  }
-
-  const userBanCheck = await checkUserBan(user.id)
-  if (userBanCheck.isBanned) {
-    return { success: false, error: "banned", userId: user.id }
-  }
-
-  const ipBanCheck = await checkIPBan(ipAddress)
-  if (ipBanCheck.isBanned) {
-    return { success: false, error: "This IP address has been banned." }
-  }
-
-  // Track login IP
-  await trackIPAddress(user.id, ipAddress)
-
-  const cookieStore = await cookies()
-  cookieStore.set("user_id", user.id.toString(), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
-  })
-
-  return { success: true, userId: user.id }
-}
-
-export async function logout() {
-  const cookieStore = await cookies()
-  cookieStore.delete("user_id")
-  return { success: true }
-}
-
+/**
+ * Get the current authenticated user from Supabase Auth
+ * Returns user data from public.users table
+ */
 export async function getCurrentUser() {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get("user_id")?.value
+  const supabase = await createClient()
 
-  if (!userId) {
+  // Get the current auth user
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser()
+
+  if (!authUser) {
     return null
   }
 
-  const supabase = createServiceRoleClient()
-  const { data: user } = await supabase.from("users").select("*").eq("id", Number.parseInt(userId)).single()
+  // Get the user data from public.users table
+  const { data: userData, error } = await supabase.from("users").select("*").eq("auth_user_id", authUser.id).single()
 
-  return user
+  if (error || !userData) {
+    return null
+  }
+
+  return userData
+}
+
+/**
+ * Server-side signup function
+ */
+export async function signup(username: string, password: string, ip: string, email?: string) {
+  const supabase = await createClient()
+
+  // Use username as email if email not provided (for backwards compatibility)
+  const userEmail = email || `${username}@blitzrush.local`
+
+  // Check if username already exists
+  const { data: existingUser } = await supabase.from("users").select("id").eq("username", username).single()
+
+  if (existingUser) {
+    return { success: false, error: "Username already taken" }
+  }
+
+  // Create Supabase Auth user
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: userEmail,
+    password,
+    options: {
+      emailRedirectTo:
+        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/game`,
+    },
+  })
+
+  if (authError || !authData.user) {
+    return { success: false, error: authError?.message || "Failed to create account" }
+  }
+
+  // Create user record in public.users table
+  const { error: userError } = await supabase.from("users").insert({
+    auth_user_id: authData.user.id,
+    username,
+    email: userEmail,
+    ip_address: ip,
+    role: "player",
+    points: 0,
+    is_banned: false,
+    is_muted: false,
+    block_alliance_invites: false,
+  })
+
+  if (userError) {
+    return { success: false, error: "Failed to create user profile" }
+  }
+
+  // Track registration IP
+  const { data: userData } = await supabase.from("users").select("id").eq("auth_user_id", authData.user.id).single()
+
+  if (userData) {
+    await supabase.from("user_ip_history").insert({
+      user_id: userData.id,
+      ip_address: ip,
+      access_count: 1,
+    })
+  }
+
+  return { success: true }
 }
