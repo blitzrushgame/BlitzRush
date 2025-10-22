@@ -6,6 +6,14 @@ import { useRouter } from "next/navigation"
 import type { GameStateData } from "@/lib/types/game"
 import { ChevronDown } from "lucide-react"
 import Minimap from "./minimap"
+import {
+  WORLD_SIZE_TILES,
+  TILE_SIZE_PX,
+  GRASS_PNG_SIZE_TILES,
+  GRASS_PNG_SIZE_PX,
+  CAMERA_MOVE_SPEED,
+  clampTileCoords,
+} from "@/lib/game/constants"
 
 interface GameCanvasProps {
   initialState: GameStateData
@@ -51,27 +59,20 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
     useImperativeHandle(ref, () => ({
       updateCamera: (x: number, y: number) => {
-        console.log("[v0] updateCamera called with x:", x, "y:", y)
+        console.log("[v0] updateCamera called with tile coords:", x, y)
         setGameState((prev) => {
-          const worldSize = 300
-          const tileSize = 64
-          const worldPixelSize = worldSize * tileSize
-
-          const clampedX = Math.max(-worldPixelSize, Math.min(worldPixelSize, x))
-          const clampedY = Math.max(-worldPixelSize, Math.min(worldPixelSize, y))
+          const clamped = clampTileCoords(x, y)
 
           const newState = {
             ...prev,
             camera: {
               ...prev.camera,
-              x: clampedX,
-              y: clampedY,
+              x: clamped.x,
+              y: clamped.y,
             },
           }
 
-          // Save the state immediately
           onStateChange(newState)
-
           return newState
         })
       },
@@ -173,19 +174,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         }
 
         if (e.key.toLowerCase() === "c" && onSendCoordinateMessage) {
-          const worldSize = 300
-          const tileSize = 64
-          const worldPixelSize = worldSize * tileSize
-          const displayRange = 2000
-
-          const horizontalCoord = Math.round(
-            ((worldPixelSize - gameStateRef.current.camera.x) / (worldPixelSize * 2)) * displayRange,
-          )
-          const verticalCoord = Math.round(
-            ((worldPixelSize - gameStateRef.current.camera.y) / (worldPixelSize * 2)) * displayRange,
-          )
-
-          const coordMessage = `[MAP:${currentMap}:${horizontalCoord}:${verticalCoord}]`
+          const coordMessage = `[MAP:${currentMap}:${Math.round(gameStateRef.current.camera.x)}:${Math.round(gameStateRef.current.camera.y)}]`
           onSendCoordinateMessage(coordMessage)
           return
         }
@@ -201,33 +190,27 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       window.addEventListener("keyup", handleKeyUp)
 
       const gameLoop = () => {
-        const moveSpeed = 5
         let deltaX = 0
         let deltaY = 0
 
-        if (keysRef.current.has("w") || keysRef.current.has("arrowup")) deltaY += moveSpeed
-        if (keysRef.current.has("s") || keysRef.current.has("arrowdown")) deltaY -= moveSpeed
-        if (keysRef.current.has("a") || keysRef.current.has("arrowleft")) deltaX += moveSpeed
-        if (keysRef.current.has("d") || keysRef.current.has("arrowright")) deltaX -= moveSpeed
+        if (keysRef.current.has("w") || keysRef.current.has("arrowup")) deltaY -= CAMERA_MOVE_SPEED
+        if (keysRef.current.has("s") || keysRef.current.has("arrowdown")) deltaY += CAMERA_MOVE_SPEED
+        if (keysRef.current.has("a") || keysRef.current.has("arrowleft")) deltaX -= CAMERA_MOVE_SPEED
+        if (keysRef.current.has("d") || keysRef.current.has("arrowright")) deltaX += CAMERA_MOVE_SPEED
 
         if (deltaX !== 0 || deltaY !== 0) {
           setGameState((prev) => {
-            const worldSize = 300
-            const tileSize = 64
-            const worldPixelSize = worldSize * tileSize
-
             const newX = prev.camera.x + deltaX
             const newY = prev.camera.y + deltaY
 
-            const clampedX = Math.max(-worldPixelSize, Math.min(worldPixelSize, newX))
-            const clampedY = Math.max(-worldPixelSize, Math.min(worldPixelSize, newY))
+            const clamped = clampTileCoords(newX, newY)
 
             return {
               ...prev,
               camera: {
                 ...prev.camera,
-                x: clampedX,
-                y: clampedY,
+                x: clamped.x,
+                y: clamped.y,
               },
             }
           })
@@ -260,24 +243,27 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     }, [])
 
     const drawIsometricTerrain = (ctx: CanvasRenderingContext2D, camera: { x: number; y: number; zoom: number }) => {
-      const tileSize = 64 * camera.zoom
+      const cameraTileX = camera.x
+      const cameraTileY = camera.y
+      const cameraPixelX = cameraTileX * TILE_SIZE_PX * camera.zoom
+      const cameraPixelY = cameraTileY * TILE_SIZE_PX * camera.zoom
+
+      const tileSize = TILE_SIZE_PX * camera.zoom
       const tileWidth = tileSize
       const tileHeight = tileSize * 0.7
-
-      const worldSize = 300
 
       const visibleTilesX = Math.ceil(ctx.canvas.width / tileWidth) + 2
       const visibleTilesY = Math.ceil(ctx.canvas.height / tileHeight) + 2
 
-      const startX = Math.max(-worldSize, Math.floor(-camera.x / tileWidth) - visibleTilesX / 2)
-      const endX = Math.min(worldSize, Math.ceil(-camera.x / tileWidth) + visibleTilesX / 2)
-      const startY = Math.max(-worldSize, Math.floor(-camera.y / tileHeight) - visibleTilesY / 2)
-      const endY = Math.min(worldSize, Math.ceil(-camera.y / tileHeight) + visibleTilesY / 2)
+      const startX = Math.max(0, Math.floor(cameraTileX - visibleTilesX / 2))
+      const endX = Math.min(WORLD_SIZE_TILES, Math.ceil(cameraTileX + visibleTilesX / 2))
+      const startY = Math.max(0, Math.floor(cameraTileY - visibleTilesY / 2))
+      const endY = Math.min(WORLD_SIZE_TILES, Math.ceil(cameraTileY + visibleTilesY / 2))
 
       for (let x = startX; x <= endX; x++) {
         for (let y = startY; y <= endY; y++) {
-          const screenX = x * tileWidth + camera.x + ctx.canvas.width / 2
-          const screenY = y * tileHeight + camera.y + ctx.canvas.height / 2
+          const screenX = (x - cameraTileX) * tileWidth + ctx.canvas.width / 2
+          const screenY = (y - cameraTileY) * tileHeight + ctx.canvas.height / 2
 
           const terrainType = (x + y) % 3
           let tileColor = "#4a4a4a"
@@ -302,25 +288,21 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       }
 
       if (grassTileRef.current) {
-        const grassWidth = 768 * camera.zoom
-        const grassHeight = 384 * camera.zoom
+        const grassPngSizePx = GRASS_PNG_SIZE_PX * camera.zoom
 
-        const bufferTiles = 2
-        const tilesX = Math.ceil(ctx.canvas.width / grassWidth) + bufferTiles * 2
-        const tilesY = Math.ceil(ctx.canvas.height / grassHeight) + bufferTiles * 2
-
-        const offsetX = ((camera.x % grassWidth) + grassWidth) % grassWidth
-        const offsetY = ((camera.y % grassHeight) + grassHeight) % grassHeight
-        const startScreenX = -grassWidth * bufferTiles + offsetX
-        const startScreenY = -grassHeight * bufferTiles + offsetY
+        const grassStartX = Math.floor(startX / GRASS_PNG_SIZE_TILES) * GRASS_PNG_SIZE_TILES
+        const grassEndX = Math.ceil(endX / GRASS_PNG_SIZE_TILES) * GRASS_PNG_SIZE_TILES
+        const grassStartY = Math.floor(startY / GRASS_PNG_SIZE_TILES) * GRASS_PNG_SIZE_TILES
+        const grassEndY = Math.ceil(endY / GRASS_PNG_SIZE_TILES) * GRASS_PNG_SIZE_TILES
 
         ctx.filter = "brightness(1.09)"
 
-        for (let x = 0; x < tilesX; x++) {
-          for (let y = 0; y < tilesY; y++) {
-            const screenX = startScreenX + x * grassWidth
-            const screenY = startScreenY + y * grassHeight
-            ctx.drawImage(grassTileRef.current, screenX, screenY, grassWidth, grassHeight)
+        for (let x = grassStartX; x < grassEndX; x += GRASS_PNG_SIZE_TILES) {
+          for (let y = grassStartY; y < grassEndY; y += GRASS_PNG_SIZE_TILES) {
+            const screenX = (x - cameraTileX) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2
+            const screenY = (y - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2
+
+            ctx.drawImage(grassTileRef.current, screenX, screenY, grassPngSizePx, grassPngSizePx)
           }
         }
 
@@ -334,17 +316,18 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
             if (response.ok) {
               const data = await response.json()
               if (data.homeBase && data.homeBase.world_id === currentMap) {
-                const baseWorldX = data.homeBase.x
-                const baseWorldY = data.homeBase.y
+                const baseTileX = data.homeBase.x
+                const baseTileY = data.homeBase.y
                 const baseWidth = 800 * camera.zoom
                 const baseHeight = 600 * camera.zoom
 
-                const screenX = baseWorldX + camera.x + ctx.canvas.width / 2 - baseWidth / 2
-                const screenY = baseWorldY + camera.y + ctx.canvas.height / 2 - baseHeight / 2
+                const screenX =
+                  (baseTileX - cameraTileX) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2 - baseWidth / 2
+                const screenY =
+                  (baseTileY - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2 - baseHeight / 2
 
                 ctx.drawImage(homeBaseRef.current!, screenX, screenY, baseWidth, baseHeight)
 
-                // Draw placeholder factories inside the base
                 const factories = [
                   { x: -180, y: -120, color: "#ff4444", label: "Steel" },
                   { x: 40, y: -140, color: "#4444ff", label: "Carbon" },
@@ -353,10 +336,8 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
                 ]
 
                 factories.forEach((factory) => {
-                  const factoryWorldX = baseWorldX + factory.x * camera.zoom
-                  const factoryWorldY = baseWorldY + factory.y * camera.zoom
-                  const factoryScreenX = factoryWorldX + camera.x + ctx.canvas.width / 2
-                  const factoryScreenY = factoryWorldY + camera.y + ctx.canvas.height / 2
+                  const factoryScreenX = screenX + baseWidth / 2 + factory.x * camera.zoom
+                  const factoryScreenY = screenY + baseHeight / 2 + factory.y * camera.zoom
                   const factorySize = 60 * camera.zoom
 
                   ctx.fillStyle = factory.color
@@ -430,24 +411,21 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       } else if (gameState.isDragging && gameState.dragStart) {
         const deltaX = x - gameState.dragStart.x
         const deltaY = y - gameState.dragStart.y
+        const tileDeltaX = deltaX / (TILE_SIZE_PX * gameState.camera.zoom)
+        const tileDeltaY = deltaY / (TILE_SIZE_PX * gameState.camera.zoom)
 
         setGameState((prev) => {
-          const worldSize = 300
-          const tileSize = 64
-          const worldPixelSize = worldSize * tileSize
+          const newX = prev.camera.x - tileDeltaX
+          const newY = prev.camera.y - tileDeltaY
 
-          const newX = prev.camera.x + deltaX
-          const newY = prev.camera.y + deltaY
-
-          const clampedX = Math.max(-worldPixelSize, Math.min(worldPixelSize, newX))
-          const clampedY = Math.max(-worldPixelSize, Math.min(worldPixelSize, newY))
+          const clamped = clampTileCoords(newX, newY)
 
           return {
             ...prev,
             camera: {
               ...prev.camera,
-              x: clampedX,
-              y: clampedY,
+              x: clamped.x,
+              y: clamped.y,
             },
             dragStart: { x, y },
           }
@@ -491,19 +469,14 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
     const handleCameraMove = (x: number, y: number) => {
       setGameState((prev) => {
-        const worldSize = 300
-        const tileSize = 64
-        const worldPixelSize = worldSize * tileSize
-
-        const clampedX = Math.max(-worldPixelSize, Math.min(worldPixelSize, x))
-        const clampedY = Math.max(-worldPixelSize, Math.min(worldPixelSize, y))
+        const clamped = clampTileCoords(x, y)
 
         return {
           ...prev,
           camera: {
             ...prev.camera,
-            x: clampedX,
-            y: clampedY,
+            x: clamped.x,
+            y: clamped.y,
           },
         }
       })

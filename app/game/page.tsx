@@ -6,6 +6,7 @@ import GameCanvas, { type GameCanvasRef } from "@/components/game-canvas-persist
 import { GameChat, type GameChatRef } from "@/components/game-chat"
 import type { GameStateData } from "@/lib/types/game"
 import { useGameRealtime } from "@/hooks/use-game-realtime"
+import { WORLD_SIZE_TILES } from "@/lib/game/constants"
 
 export default function GamePage() {
   const router = useRouter()
@@ -174,7 +175,7 @@ export default function GamePage() {
 
       if (!response.ok) {
         const newState: GameStateData = {
-          camera: { x: 0, y: 0, zoom: 2 },
+          camera: { x: WORLD_SIZE_TILES / 2, y: WORLD_SIZE_TILES / 2, zoom: 1.0 },
           buildings: [],
           units: [],
           resources: {
@@ -209,7 +210,7 @@ export default function GamePage() {
         newState = data.state as GameStateData
       } else {
         newState = {
-          camera: { x: 0, y: 0, zoom: 2 },
+          camera: { x: WORLD_SIZE_TILES / 2, y: WORLD_SIZE_TILES / 2, zoom: 1.0 },
           buildings: [],
           units: [],
           resources: {
@@ -263,7 +264,7 @@ export default function GamePage() {
     } catch (error) {
       console.error("[v0] Error in loadGameState:", error)
       const newState: GameStateData = {
-        camera: { x: 0, y: 0, zoom: 2 },
+        camera: { x: WORLD_SIZE_TILES / 2, y: WORLD_SIZE_TILES / 2, zoom: 1.0 },
         buildings: [],
         units: [],
         resources: {
@@ -331,20 +332,12 @@ export default function GamePage() {
   }
 
   const handleCoordinateClick = (mapId: number, x: number, y: number) => {
-    const worldSize = 300
-    const tileSize = 64
-    const worldPixelSize = worldSize * tileSize
-    const displayRange = 2000
-
-    const worldX = worldPixelSize - (x / displayRange) * (worldPixelSize * 2)
-    const worldY = worldPixelSize - (y / displayRange) * (worldPixelSize * 2)
-
     if (mapId === currentMap) {
       if (canvasRef.current) {
-        canvasRef.current.updateCamera(worldX, worldY)
+        canvasRef.current.updateCamera(x, y)
       }
     } else {
-      sessionStorage.setItem("targetCoordinates", JSON.stringify({ x: worldX, y: worldY }))
+      sessionStorage.setItem("targetCoordinates", JSON.stringify({ x, y }))
       setCurrentMap(mapId)
     }
   }
