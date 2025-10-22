@@ -67,8 +67,16 @@ export async function signupClient(username: string, email: string, password: st
       .single()
 
     if (profileError) {
-      console.error("[v0] Failed to create user profile manually:", profileError)
-      return { success: false, error: "Failed to create user profile" }
+      console.error("[v0] Failed to create user profile manually. Full error details:", {
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+        code: profileError.code,
+      })
+      return {
+        success: false,
+        error: `Database error: ${profileError.message}${profileError.details ? " - " + profileError.details : ""}`,
+      }
     }
 
     console.log("[v0] User profile created manually with ID:", manualProfile.id)
