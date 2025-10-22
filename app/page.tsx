@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { signup, login } from "@/lib/auth/simple-auth"
+import { signupClient, loginClient } from "@/lib/auth/supabase-auth"
 
 export default function HomePage() {
   const router = useRouter()
@@ -32,7 +32,7 @@ export default function HomePage() {
       const { ip } = await ipRes.json()
 
       console.log("[v0] Attempting login with username:", username)
-      const result = await login(username, password, ip)
+      const result = await loginClient(username, password, ip)
 
       if (!result.success) {
         setError(result.error || "Login failed")
@@ -60,7 +60,7 @@ export default function HomePage() {
       const { ip } = await ipRes.json()
 
       console.log("[v0] Attempting signup with username:", username)
-      const result = await signup(username, email, password, ip)
+      const result = await signupClient(username, email, password, ip)
 
       if (!result.success) {
         setError(result.error || "Registration failed")
