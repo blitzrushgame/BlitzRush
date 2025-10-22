@@ -15,7 +15,6 @@ export async function signupClient(username: string, email: string, password: st
 
   console.log("[v0] Creating Supabase Auth user with metadata...")
   // Create Supabase Auth user with metadata
-  // The database trigger will automatically create the user profile
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
@@ -34,9 +33,9 @@ export async function signupClient(username: string, email: string, password: st
   }
 
   console.log("[v0] Auth user created with ID:", authData.user.id)
-  console.log("[v0] Database trigger should automatically create user profile")
+  console.log("[v0] Waiting for database trigger to create user profile...")
 
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 2000))
 
   const { data: profileCheck } = await supabase
     .from("users")
@@ -47,7 +46,45 @@ export async function signupClient(username: string, email: string, password: st
   console.log("[v0] Profile verification:", profileCheck)
 
   if (!profileCheck) {
-    console.error("[v0] WARNING: User profile was not created by trigger. This may cause login issues.")
+    console.log("[v0] Trigger did not create profile. Creating manually as fallback...")
+
+    // Manually create user profile if trigger didn't work
+    const { data: manualProfile, error: profileError } = await supabase
+      .from("users")
+      .insert({
+        auth_user_id: authData.user.id,
+        username,
+        email,
+        password: null,
+        ip_address: ip,
+        role: "player",
+        points: 0,
+        is_banned: false,
+        is_muted: false,
+        block_alliance_invites: false,
+      })
+      .select("id")
+      .single()
+
+    if (profileError) {
+      console.error("[v0] Failed to create user profile manually:", profileError)
+      // Clean up auth user if profile creation failed
+      await supabase.auth.admin.deleteUser(authData.user.id)
+      return { success: false, error: "Failed to create user profile" }
+    }
+
+    console.log("[v0] User profile created manually with ID:", manualProfile.id)
+
+    // Track registration IP
+    await supabase.from("user_ip_history").insert({
+      user_id: manualProfile.id,
+      ip_address: ip,
+      access_count: 1,
+    })
+
+    console.log("[v0] Registration IP tracked")
+  } else {
+    console.log("[v0] User profile created successfully by trigger")
   }
 
   return { success: true }
