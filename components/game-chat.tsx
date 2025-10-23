@@ -214,7 +214,7 @@ export const GameChat = forwardRef<GameChatRef, GameChatProps>(
       if (!globalInput.trim()) return
       if (globalCooldown > 0) return
       if (isMuted) {
-        alert(muteReason || "You are muted and cannot send messages.")
+        alert("You have been muted by a staff member and cannot send messages." || mutereason )
         return
       }
 
