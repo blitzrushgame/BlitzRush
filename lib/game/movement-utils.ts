@@ -53,7 +53,7 @@ export function calculateIntermediatePosition(
 /**
  * Check if position is within map bounds
  */
-export function isWithinBounds(pos: Position, mapWidth = 1000, mapHeight = 1000): boolean {
+export function isWithinBounds(pos: Position, mapWidth = 5000, mapHeight = 5000): boolean {
   return pos.x >= 0 && pos.x < mapWidth && pos.y >= 0 && pos.y < mapHeight
 }
 

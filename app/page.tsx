@@ -4,19 +4,17 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
+import { signupClient, loginClient } from "@/lib/auth/supabase-auth"
 
 export default function HomePage() {
   const router = useRouter()
   const [showLogin, setShowLogin] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
-  const [usernameOrEmail, setUsernameOrEmail] = useState("")
-  const [password, setPassword] = useState("")
   const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [successMessage, setSuccessMessage] = useState("")
 
   const handlePlayClick = () => {
     setShowLogin(true)
@@ -27,35 +25,27 @@ export default function HomePage() {
     e.preventDefault()
     setLoading(true)
     setError("")
-    setSuccessMessage("")
 
-    const supabase = createClient()
+    try {
+      console.log("[v0] Getting IP address")
+      const ipRes = await fetch("/api/get-ip")
+      const { ip } = await ipRes.json()
 
-    const lookupRes = await fetch("/api/auth/lookup-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: usernameOrEmail }),
-    })
+      console.log("[v0] Attempting login with username:", username)
+      const result = await loginClient(username, password, ip)
 
-    if (!lookupRes.ok) {
-      const { error: lookupError } = await lookupRes.json()
-      setError(lookupError || "Username not found")
-      setLoading(false)
-      return
-    }
+      if (!result.success) {
+        setError(result.error || "Login failed")
+        setLoading(false)
+        return
+      }
 
-    const { email: userEmail } = await lookupRes.json()
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: userEmail,
-      password,
-    })
-
-    if (signInError) {
-      setError(signInError.message)
-      setLoading(false)
-    } else {
+      console.log("[v0] Login successful, redirecting to game")
       router.push("/game")
+    } catch (err: any) {
+      console.error("[v0] Login error:", err)
+      setError(err.message || "An error occurred during login")
+      setLoading(false)
     }
   }
 
@@ -63,74 +53,45 @@ export default function HomePage() {
     e.preventDefault()
     setLoading(true)
     setError("")
-    setSuccessMessage("")
 
-    const supabase = createClient()
+    try {
+      console.log("[v0] Getting IP address")
+      const ipRes = await fetch("/api/get-ip")
+      const { ip } = await ipRes.json()
 
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/game`,
-        data: {
-          username: username,
-        },
-      },
-    })
+      console.log("[v0] Attempting signup with username:", username)
+      const result = await signupClient(username, email, password, ip)
 
-    if (signUpError) {
-      setError(signUpError.message)
+      if (!result.success) {
+        setError(result.error || "Registration failed")
+        setLoading(false)
+        return
+      }
+
+      console.log("[v0] Signup successful, showing login screen")
+      setIsSignUp(false)
+      setUsername("")
+      setPassword("")
+      setEmail("")
+      setError("SUCCESS: Registration successful! Please log in.")
       setLoading(false)
-      return
-    }
-
-    if (!authData.user) {
-      setError("Failed to create account")
+    } catch (err: any) {
+      console.error("[v0] Signup error:", err)
+      setError(err.message || "An error occurred during registration")
       setLoading(false)
-      return
     }
-
-    const registerRes = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: username,
-        email: email,
-        auth_user_id: authData.user.id,
-      }),
-    })
-
-    if (!registerRes.ok) {
-      const { error: registerError } = await registerRes.json()
-      setError(registerError || "Failed to register username")
-      setLoading(false)
-      return
-    }
-
-    setSuccessMessage(
-      "Account created successfully! Please check your email and click the verification link before logging in.",
-    )
-    setIsSignUp(false)
-    setUsernameOrEmail("")
-    setPassword("")
-    setUsername("")
-    setEmail("")
-    setLoading(false)
   }
 
   return (
     <div className="min-h-screen relative flex items-center justify-center overflow-hidden">
-      {/* Background image with fade and vignette */}
       <div
         className="absolute inset-0 bg-cover bg-center opacity-30"
         style={{
           backgroundImage: "url('/images/tank-background.png')",
         }}
       />
-      {/* Vignette overlay */}
       <div className="absolute inset-0 bg-gradient-radial from-transparent via-black/20 to-black/60" />
 
-      {/* Main content */}
       <div className="relative z-10 text-center">
         <h1
           className={`text-6xl font-bold text-white tracking-wider mb-8 transition-all duration-700 font-mono ${
@@ -165,75 +126,51 @@ export default function HomePage() {
             </p>
 
             <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
-              {isSignUp ? (
-                <>
-                  <div>
-                    <label className="block text-neutral-300 text-sm font-medium mb-2">Username</label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      placeholder="commander"
-                      required
-                    />
-                  </div>
+              <div>
+                <label className="block text-neutral-300 text-sm font-medium mb-2">Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                  placeholder="commander"
+                  required
+                  minLength={3}
+                />
+              </div>
 
-                  <div>
-                    <label className="block text-neutral-300 text-sm font-medium mb-2">Email</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      placeholder="commander@blitzrush.com"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-300 text-sm font-medium mb-2">Password</label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      placeholder="••••••••"
-                      required
-                      minLength={6}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-neutral-300 text-sm font-medium mb-2">Username</label>
-                    <input
-                      type="text"
-                      value={usernameOrEmail}
-                      onChange={(e) => setUsernameOrEmail(e.target.value)}
-                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      placeholder="commander"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-neutral-300 text-sm font-medium mb-2">Password</label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      placeholder="••••••••"
-                      required
-                    />
-                  </div>
-                </>
+              {isSignUp && (
+                <div>
+                  <label className="block text-neutral-300 text-sm font-medium mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    placeholder="commander@blitzrush.com"
+                    required
+                  />
+                </div>
               )}
 
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-              {successMessage && <p className="text-green-400 text-sm">{successMessage}</p>}
+              <div>
+                <label className="block text-neutral-300 text-sm font-medium mb-2">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-neutral-700/50 border border-neutral-600/50 rounded-lg px-4 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                />
+              </div>
+
+              {error && (
+                <p className={error.startsWith("SUCCESS:") ? "text-green-400 text-sm" : "text-red-400 text-sm"}>
+                  {error.replace("SUCCESS: ", "")}
+                </p>
+              )}
 
               <button
                 type="submit"
@@ -249,7 +186,6 @@ export default function HomePage() {
                   onClick={() => {
                     setIsSignUp(!isSignUp)
                     setError("")
-                    setSuccessMessage("")
                   }}
                   className="text-amber-400 hover:text-amber-300 transition-colors"
                 >

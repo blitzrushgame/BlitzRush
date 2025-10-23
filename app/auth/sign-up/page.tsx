@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { signup } from "@/lib/auth/simple-auth"
+import { signupClient } from "@/lib/auth/supabase-auth"
 import Link from "next/link"
 
 export default function SignUpPage() {
@@ -29,17 +29,33 @@ export default function SignUpPage() {
     setIsLoading(true)
     setError(null)
 
+    if (!username || username.trim().length < 3) {
+      setError("Username must be at least 3 characters")
+      setIsLoading(false)
+      return
+    }
+
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters")
+      setIsLoading(false)
+      return
+    }
+
     const ipAddress = await getUserIP()
-    const result = await signup(username, password, ipAddress)
+    console.log("[v0] Attempting signup with IP:", ipAddress)
+
+    const result = await signupClient(username, `${username}@blitzrush.local`, password, ipAddress)
 
     if (!result.success) {
       if (result.error?.includes("banned")) {
         router.push("/banned")
       } else {
+        console.error("[v0] Signup failed:", result.error)
         setError(result.error || "Signup failed")
         setIsLoading(false)
       }
     } else {
+      console.log("[v0] Signup successful, redirecting to game")
       router.push("/game")
     }
   }

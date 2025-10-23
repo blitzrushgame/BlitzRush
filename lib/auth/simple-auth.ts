@@ -1,215 +1,88 @@
-"use server"
+import { createClient } from "@/lib/supabase/server"
 
-import { cookies } from "next/headers"
-import { createServiceRoleClient } from "@/lib/supabase/service-role"
+/**
+ * Get the current authenticated user from Supabase Auth
+ * Returns user data from public.users table
+ */
+export async function getCurrentUser() {
+  const supabase = await createClient()
 
-async function checkVPN(ipAddress: string): Promise<{ isVPN: boolean; error?: string }> {
-  const apiKey = process.env.IPHUB_API_KEY
+  // Get the current auth user
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser()
 
-  if (!apiKey) {
-    console.warn("[v0] IPHub API key not configured, skipping VPN check")
-    return { isVPN: false }
+  if (!authUser) {
+    return null
   }
 
-  try {
-    const response = await fetch(`https://v2.api.iphub.info/ip/${ipAddress}`, {
-      headers: {
-        "X-Key": apiKey,
-      },
-    })
+  // Get the user data from public.users table
+  const { data: userData, error } = await supabase.from("users").select("*").eq("auth_user_id", authUser.id).single()
 
-    if (!response.ok) {
-      console.error("[v0] IPHub API error:", response.status)
-      return { isVPN: false }
-    }
-
-    const data = await response.json()
-
-    if (data.block === 1) {
-      return { isVPN: true }
-    }
-
-    return { isVPN: false }
-  } catch (error) {
-    console.error("[v0] IPHub check failed:", error)
-    return { isVPN: false }
+  if (error || !userData) {
+    return null
   }
+
+  return userData
 }
 
-async function checkIPBan(ipAddress: string): Promise<{ isBanned: boolean; reason?: string; bannedUntil?: Date }> {
-  const supabase = createServiceRoleClient()
+/**
+ * Server-side signup function
+ */
+export async function signup(username: string, password: string, ip: string, email?: string) {
+  const supabase = await createClient()
 
-  const { data: bannedIP } = await supabase
-    .from("banned_ips")
-    .select("ban_type, reason, banned_until")
-    .eq("ip_address", ipAddress)
-    .maybeSingle()
+  // Use username as email if email not provided (for backwards compatibility)
+  const userEmail = email || `${username}@blitzrush.local`
 
-  if (!bannedIP) {
-    return { isBanned: false }
-  }
-
-  // Check if temporary ban has expired
-  if (bannedIP.ban_type === "temporary" && bannedIP.banned_until) {
-    const expirationDate = new Date(bannedIP.banned_until)
-    if (expirationDate < new Date()) {
-      // Ban has expired, remove it
-      await supabase.from("banned_ips").delete().eq("ip_address", ipAddress)
-      return { isBanned: false }
-    }
-  }
-
-  return {
-    isBanned: true,
-    reason: bannedIP.reason,
-    bannedUntil: bannedIP.banned_until ? new Date(bannedIP.banned_until) : undefined,
-  }
-}
-
-async function checkUserBan(userId: number): Promise<{ isBanned: boolean; reason?: string; bannedUntil?: Date }> {
-  const supabase = createServiceRoleClient()
-
-  const { data: user } = await supabase
-    .from("users")
-    .select("is_banned, ban_type, ban_reason, banned_until")
-    .eq("id", userId)
-    .maybeSingle()
-
-  if (!user || !user.is_banned) {
-    return { isBanned: false }
-  }
-
-  // Check if temporary ban has expired
-  if (user.ban_type === "temporary" && user.banned_until) {
-    const expirationDate = new Date(user.banned_until)
-    if (expirationDate < new Date()) {
-      // Ban has expired, remove it
-      await supabase
-        .from("users")
-        .update({
-          is_banned: false,
-          ban_type: null,
-          ban_reason: null,
-          banned_until: null,
-          banned_at: null,
-          banned_by_admin_id: null,
-        })
-        .eq("id", userId)
-      return { isBanned: false }
-    }
-  }
-
-  return {
-    isBanned: true,
-    reason: user.ban_reason || undefined,
-    bannedUntil: user.banned_until ? new Date(user.banned_until) : undefined,
-  }
-}
-
-export async function signup(username: string, password: string, ipAddress: string) {
-  const ipBanCheck = await checkIPBan(ipAddress)
-  if (ipBanCheck.isBanned) {
-    return { success: false, error: "This IP address has been banned from creating accounts." }
-  }
-
-  const supabase = createServiceRoleClient()
-
-  const vpnCheck = await checkVPN(ipAddress)
-  if (vpnCheck.isVPN) {
-    return { success: false, error: "VPN or proxy detected. Please disable your VPN and try again." }
-  }
-
-  const { data: existingUser } = await supabase.from("users").select("id").ilike("username", username).maybeSingle()
+  // Check if username already exists
+  const { data: existingUser } = await supabase.from("users").select("id").eq("username", username).single()
 
   if (existingUser) {
     return { success: false, error: "Username already taken" }
   }
 
-  const { data: existingAccounts, error: countError } = await supabase
-    .from("users")
-    .select("id", { count: "exact" })
-    .eq("ip_address", ipAddress)
-
-  if (countError) {
-    return { success: false, error: countError.message }
-  }
-
-  if (existingAccounts && existingAccounts.length >= 2) {
-    return { success: false, error: "Maximum of 2 accounts allowed per IP address" }
-  }
-
-  const { data: newUser, error } = await supabase
-    .from("users")
-    .insert({ username, password, ip_address: ipAddress })
-    .select()
-    .single()
-
-  if (error) {
-    return { success: false, error: error.message }
-  }
-
-  const cookieStore = await cookies()
-  cookieStore.set("user_id", newUser.id.toString(), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
+  // Create Supabase Auth user
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: userEmail,
+    password,
+    options: {
+      emailRedirectTo:
+        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/game`,
+    },
   })
 
-  return { success: true, userId: newUser.id }
-}
-
-export async function login(username: string, password: string) {
-  const supabase = createServiceRoleClient()
-
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("*")
-    .ilike("username", username)
-    .eq("password", password)
-    .maybeSingle()
-
-  if (error || !user) {
-    return { success: false, error: "Invalid username or password" }
+  if (authError || !authData.user) {
+    return { success: false, error: authError?.message || "Failed to create account" }
   }
 
-  const userBanCheck = await checkUserBan(user.id)
-  if (userBanCheck.isBanned) {
-    return { success: false, error: "banned", userId: user.id }
-  }
-
-  const ipBanCheck = await checkIPBan(user.ip_address)
-  if (ipBanCheck.isBanned) {
-    return { success: false, error: "This IP address has been banned." }
-  }
-
-  const cookieStore = await cookies()
-  cookieStore.set("user_id", user.id.toString(), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
+  // Create user record in public.users table
+  const { error: userError } = await supabase.from("users").insert({
+    auth_user_id: authData.user.id,
+    username,
+    email: userEmail,
+    ip_address: ip,
+    role: "player",
+    points: 0,
+    is_banned: false,
+    is_muted: false,
+    block_alliance_invites: false,
   })
 
-  return { success: true, userId: user.id }
-}
+  if (userError) {
+    return { success: false, error: "Failed to create user profile" }
+  }
 
-export async function logout() {
-  const cookieStore = await cookies()
-  cookieStore.delete("user_id")
+  // Track registration IP
+  const { data: userData } = await supabase.from("users").select("id").eq("auth_user_id", authData.user.id).single()
+
+  if (userData) {
+    await supabase.from("user_ip_history").insert({
+      user_id: userData.id,
+      ip_address: ip,
+      access_count: 1,
+    })
+  }
+
   return { success: true }
-}
-
-export async function getCurrentUser() {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get("user_id")?.value
-
-  if (!userId) {
-    return null
-  }
-
-  const supabase = createServiceRoleClient()
-  const { data: user } = await supabase.from("users").select("*").eq("id", Number.parseInt(userId)).single()
-
-  return user
 }

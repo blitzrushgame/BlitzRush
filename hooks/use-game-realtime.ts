@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 
@@ -25,6 +25,9 @@ export function useGameRealtime({
 }: GameRealtimeOptions) {
   const channelRef = useRef<RealtimeChannel | null>(null)
   const resourceIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const retryCountRef = useRef(0)
+  const maxRetries = 3
   const supabase = createClient()
 
   useEffect(() => {
@@ -38,11 +41,9 @@ export function useGameRealtime({
 
         if (response.ok) {
           const data = await response.json()
-          console.log("[v0] Resources generated:", data.produced)
+          // Resources generated successfully (silent)
         } else if (response.status === 429) {
-          // Rate limited, this is expected
-          const data = await response.json()
-          console.log("[v0] Resource generation rate limited:", data.message)
+          // Rate limited, this is expected (silent)
         }
       } catch (error) {
         console.error("[v0] Error generating resources:", error)
@@ -53,116 +54,135 @@ export function useGameRealtime({
     generateResources()
     resourceIntervalRef.current = setInterval(generateResources, 5000)
 
-    // Create a channel for this world
-    const channel = supabase.channel(`game-world-${worldId}`)
+    const setupRealtimeSubscription = () => {
+      const channel = supabase.channel(`game-world-${worldId}`, {
+        config: {
+          broadcast: { self: true },
+        },
+      })
 
-    // Subscribe to units table changes
-    if (onUnitsUpdate) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "units",
-          filter: `world_id=eq.${worldId}`,
-        },
-        (payload) => {
-          console.log("[v0] Units update:", payload)
-          onUnitsUpdate(payload)
-        },
-      )
-    }
-
-    // Subscribe to buildings table changes
-    if (onBuildingsUpdate) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "buildings",
-          filter: `world_id=eq.${worldId}`,
-        },
-        (payload) => {
-          console.log("[v0] Buildings update:", payload)
-          onBuildingsUpdate(payload)
-        },
-      )
-    }
-
-    if (onResourcesUpdate) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "user_game_states",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          console.log("[v0] Resources update:", payload)
-          onResourcesUpdate(payload)
-        },
-      )
-    }
-
-    // Subscribe to combat logs (where user is involved)
-    if (onCombatLog) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "combat_logs",
-          filter: `world_id=eq.${worldId}`,
-        },
-        (payload) => {
-          const record = payload.new as any
-          if (record.attacker_id === userId || record.defender_id === userId) {
-            console.log("[v0] Combat log:", payload)
-            onCombatLog(payload)
-          }
-        },
-      )
-    }
-
-    // Subscribe to game state changes from other players
-    if (onGameStateUpdate) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "user_game_states",
-          filter: `world_id=eq.${worldId}`,
-        },
-        (payload) => {
-          const record = payload.new as any
-          if (record.user_id !== userId) {
-            console.log("[v0] Game state update from other player:", payload)
-            onGameStateUpdate(payload)
-          }
-        },
-      )
-    }
-
-    // Subscribe to the channel
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        console.log(`[v0] Subscribed to real-time updates for world ${worldId}`)
-      } else if (status === "CHANNEL_ERROR") {
-        console.error(`[v0] Error subscribing to world ${worldId}`)
-      } else if (status === "TIMED_OUT") {
-        console.error(`[v0] Subscription timed out for world ${worldId}`)
+      // Subscribe to units table changes
+      if (onUnitsUpdate) {
+        channel.on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "units",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            onUnitsUpdate(payload)
+          },
+        )
       }
-    })
 
-    channelRef.current = channel
+      // Subscribe to buildings table changes
+      if (onBuildingsUpdate) {
+        channel.on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "buildings",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            onBuildingsUpdate(payload)
+          },
+        )
+      }
+
+      if (onResourcesUpdate) {
+        channel.on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "user_game_states",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            onResourcesUpdate(payload)
+          },
+        )
+      }
+
+      // Subscribe to combat logs (where user is involved)
+      if (onCombatLog) {
+        channel.on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "combat_logs",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            const record = payload.new as any
+            if (record.attacker_id === userId || record.defender_id === userId) {
+              onCombatLog(payload)
+            }
+          },
+        )
+      }
+
+      // Subscribe to game state changes from other players
+      if (onGameStateUpdate) {
+        channel.on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "user_game_states",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            const record = payload.new as any
+            if (record.user_id !== userId) {
+              onGameStateUpdate(payload)
+            }
+          },
+        )
+      }
+
+      // Subscribe to the channel with improved error handling
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log(`[v0] Realtime connected for world ${worldId}`)
+          setIsConnected(true)
+          retryCountRef.current = 0 // Reset retry count on success
+        } else if (status === "CHANNEL_ERROR") {
+          console.warn(`[v0] Realtime connection error for world ${worldId}. Game will continue using polling.`)
+          setIsConnected(false)
+
+          // Retry if we haven't exceeded max retries
+          if (retryCountRef.current < maxRetries) {
+            retryCountRef.current++
+            console.log(`[v0] Retrying realtime connection (${retryCountRef.current}/${maxRetries})...`)
+            setTimeout(() => {
+              if (channelRef.current) {
+                supabase.removeChannel(channelRef.current)
+              }
+              setupRealtimeSubscription()
+            }, 2000 * retryCountRef.current) // Exponential backoff
+          }
+        } else if (status === "TIMED_OUT") {
+          console.warn(`[v0] Realtime subscription timed out for world ${worldId}. Game will continue using polling.`)
+          setIsConnected(false)
+
+          // Don't retry on timeout - it's likely a configuration issue
+          // The game will continue to work via polling
+        }
+      })
+
+      channelRef.current = channel
+    }
+
+    setupRealtimeSubscription()
 
     // Cleanup on unmount or when worldId changes
     return () => {
-      console.log(`[v0] Unsubscribing from world ${worldId}`)
-
       if (resourceIntervalRef.current) {
         clearInterval(resourceIntervalRef.current)
         resourceIntervalRef.current = null
@@ -172,10 +192,13 @@ export function useGameRealtime({
         supabase.removeChannel(channelRef.current)
         channelRef.current = null
       }
+
+      setIsConnected(false)
+      retryCountRef.current = 0
     }
   }, [worldId, userId])
 
   return {
-    isConnected: channelRef.current !== null,
+    isConnected,
   }
 }

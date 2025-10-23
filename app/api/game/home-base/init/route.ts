@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
+import { WORLD_SIZE_TILES, CAMERA_VIEWING_RADIUS_TILES } from "@/lib/game/constants"
 
 export async function POST(request: Request) {
   try {
@@ -32,11 +33,12 @@ export async function POST(request: Request) {
       })
     }
 
-    // Generate random position for new home base
-    const x = Math.floor(Math.random() * 8000) + 1000
-    const y = Math.floor(Math.random() * 8000) + 1000
+    const centerTile = WORLD_SIZE_TILES / 2 // 1000
+    const spawnRadius = CAMERA_VIEWING_RADIUS_TILES // 15 tiles
+    const x = Math.floor(centerTile + (Math.random() * spawnRadius * 2 - spawnRadius))
+    const y = Math.floor(centerTile + (Math.random() * spawnRadius * 2 - spawnRadius))
 
-    console.log("[v0] Creating new home base at:", { x, y })
+    console.log("[v0] Creating new home base at tile coords:", { x, y })
 
     // Create new home base
     const { data: result, error: insertError } = await supabase

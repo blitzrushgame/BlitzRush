@@ -78,7 +78,7 @@ export async function applyResourceProduction(
     .select("game_data")
     .eq("user_id", userId)
     .eq("world_id", worldId)
-    .single()
+    .maybeSingle()
 
   if (stateError || !gameState) {
     console.error("Error fetching game state:", stateError)
@@ -137,7 +137,7 @@ export async function deductResources(
     .select("game_data")
     .eq("user_id", userId)
     .eq("world_id", worldId)
-    .single()
+    .maybeSingle()
 
   if (stateError || !gameState) {
     return false

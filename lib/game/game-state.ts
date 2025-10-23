@@ -58,10 +58,9 @@ export class GameStateManager {
       .select("*")
       .eq("user_id", this.userId)
       .eq("world_id", this.worldId)
-      .single()
+      .maybeSingle()
 
-    if (error && error.code !== "PGRST116") {
-      // PGRST116 = no rows found
+    if (error) {
       console.error("Error loading game state:", error)
       return
     }

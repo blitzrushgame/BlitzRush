@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
+import { WORLD_SIZE_TILES } from "@/lib/game/constants"
 
 interface MinimapProps {
   camera: { x: number; y: number; zoom: number }
@@ -27,9 +28,6 @@ export default function Minimap({
   const minimapRef = useRef<HTMLCanvasElement>(null)
   const [homeBaseLocation, setHomeBaseLocation] = useState<{ x: number; y: number } | null>(null)
 
-  const worldSize = 300
-  const tileSize = 64
-  const worldPixelSize = worldSize * tileSize
   const minimapSize = 250
 
   useEffect(() => {
@@ -41,7 +39,6 @@ export default function Minimap({
         if (response.ok) {
           const data = await response.json()
           if (data.homeBase && data.homeBase.world_id === currentMap) {
-            console.log("[v0] Home base location for minimap:", data.homeBase.x, data.homeBase.y)
             setHomeBaseLocation({ x: data.homeBase.x, y: data.homeBase.y })
           } else {
             setHomeBaseLocation(null)
@@ -67,16 +64,11 @@ export default function Minimap({
     ctx.fillStyle = "#000000"
     ctx.fillRect(0, 0, minimapSize, minimapSize)
 
-    const scale = minimapSize / (worldPixelSize * 2)
+    const scale = minimapSize / WORLD_SIZE_TILES
 
     if (homeBaseLocation) {
-      const minimapCenterX = minimapSize / 2
-      const minimapCenterY = minimapSize / 2
-
-      const homeBaseMinimapX = minimapCenterX - homeBaseLocation.x * scale
-      const homeBaseMinimapY = minimapCenterY - homeBaseLocation.y * scale
-
-      console.log("[v0] Drawing home base at minimap coords:", homeBaseMinimapX, homeBaseMinimapY)
+      const homeBaseMinimapX = homeBaseLocation.x * scale
+      const homeBaseMinimapY = homeBaseLocation.y * scale
 
       ctx.fillStyle = "#00ff00"
       ctx.beginPath()
@@ -88,16 +80,13 @@ export default function Minimap({
       ctx.stroke()
     }
 
-    const viewportWidth = canvasWidth / camera.zoom
-    const viewportHeight = canvasHeight / camera.zoom
+    const viewportWidthTiles = canvasWidth / (64 * camera.zoom)
+    const viewportHeightTiles = canvasHeight / (64 * camera.zoom)
 
-    const minimapCenterX = minimapSize / 2
-    const minimapCenterY = minimapSize / 2
-
-    const viewportX = minimapCenterX - camera.x * scale - (viewportWidth * scale) / 2
-    const viewportY = minimapCenterY - camera.y * scale - (viewportHeight * scale) / 2
-    const viewportW = viewportWidth * scale
-    const viewportH = viewportHeight * scale
+    const viewportX = (camera.x - viewportWidthTiles / 2) * scale
+    const viewportY = (camera.y - viewportHeightTiles / 2) * scale
+    const viewportW = viewportWidthTiles * scale
+    const viewportH = viewportHeightTiles * scale
 
     ctx.strokeStyle = "#00ff00"
     ctx.lineWidth = 1
@@ -105,13 +94,10 @@ export default function Minimap({
 
     ctx.fillStyle = "rgba(0, 255, 0, 0.1)"
     ctx.fillRect(viewportX, viewportY, viewportW, viewportH)
-  }, [camera, canvasWidth, canvasHeight, minimapSize, worldPixelSize, homeBaseLocation])
+  }, [camera, canvasWidth, canvasHeight, minimapSize, homeBaseLocation])
 
-  const totalWorldRange = worldPixelSize * 2
-  const displayRange = 2000
-
-  const horizontalCoord = Math.round(((worldPixelSize - camera.x) / totalWorldRange) * displayRange)
-  const verticalCoord = Math.round(((worldPixelSize - camera.y) / totalWorldRange) * displayRange)
+  const horizontalCoord = Math.round(camera.x)
+  const verticalCoord = Math.round(camera.y)
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = minimapRef.current
@@ -122,14 +108,11 @@ export default function Minimap({
     const clickX = e.clientX - rect.left
     const clickY = e.clientY - rect.top
 
-    const scale = minimapSize / (worldPixelSize * 2)
-    const minimapCenterX = minimapSize / 2
-    const minimapCenterY = minimapSize / 2
+    const scale = minimapSize / WORLD_SIZE_TILES
+    const tileX = clickX / scale
+    const tileY = clickY / scale
 
-    const worldX = -(clickX - minimapCenterX) / scale
-    const worldY = -(clickY - minimapCenterY) / scale
-
-    onCameraMove(worldX, worldY)
+    onCameraMove(tileX, tileY)
   }
 
   return (

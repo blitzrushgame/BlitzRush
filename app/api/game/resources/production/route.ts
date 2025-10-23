@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       .select("last_updated")
       .eq("user_id", userId)
       .eq("world_id", worldId)
-      .single()
+      .maybeSingle()
 
     if (error || !gameState) {
       return NextResponse.json({ error: "Game state not found" }, { status: 404 })
