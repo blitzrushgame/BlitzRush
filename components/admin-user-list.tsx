@@ -30,7 +30,6 @@ type IpHistory = {
   last_seen: string
   access_count: number
 }
-// </CHANGE>
 
 export function AdminUserList() {
   const [users, setUsers] = useState<User[]>([])
@@ -38,10 +37,10 @@ export function AdminUserList() {
   const [editingUser, setEditingUser] = useState<number | null>(null)
   const [newUsername, setNewUsername] = useState("")
   const [newPassword, setNewPassword] = useState("")
+  const [searchTerm, setSearchTerm] = useState("")
 
   const [ipHistory, setIpHistory] = useState<Record<number, IpHistory[]>>({})
   const [loadingIpHistory, setLoadingIpHistory] = useState<Record<number, boolean>>({})
-  // </CHANGE>
 
   const [muteType, setMuteType] = useState<"temporary" | "permanent">("temporary")
   const [muteDuration, setMuteDuration] = useState("24")
@@ -62,6 +61,9 @@ export function AdminUserList() {
       const data = await response.json()
       if (Array.isArray(data)) {
         setUsers(data)
+        data.forEach((user: User) => {
+          fetchIpHistory(user.id)
+        })
       } else {
         console.error("Error fetching users:", data.error || "Invalid response")
         setUsers([])
@@ -90,12 +92,23 @@ export function AdminUserList() {
   const handleEditUser = (userId: number, username: string) => {
     setEditingUser(userId)
     setNewUsername(username)
-    // Fetch IP history when editing user
     if (!ipHistory[userId]) {
       fetchIpHistory(userId)
     }
   }
-  // </CHANGE>
+
+  const filteredUsers = users.filter((user) => {
+    if (!searchTerm) return true
+
+    const searchLower = searchTerm.toLowerCase()
+
+    if (user.username.toLowerCase().includes(searchLower)) {
+      return true
+    }
+
+    const userIps = ipHistory[user.id] || []
+    return userIps.some((ip) => ip.ip_address.includes(searchTerm))
+  })
 
   const handleUpdateUsername = async (userId: number) => {
     const response = await fetch("/api/admin/update-user", {
@@ -217,7 +230,21 @@ export function AdminUserList() {
 
   return (
     <div className="space-y-4">
-      {users.map((user) => (
+      <div className="space-y-2">
+        <Label>Search Users</Label>
+        <Input
+          type="text"
+          placeholder="Search by username or IP address..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full max-w-md"
+        />
+        <p className="text-sm text-muted-foreground">
+          Found {filteredUsers.length} user{filteredUsers.length !== 1 ? "s" : ""}
+        </p>
+      </div>
+
+      {filteredUsers.map((user) => (
         <Card key={user.id} className="p-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -240,7 +267,22 @@ export function AdminUserList() {
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">ID: {user.id}</p>
-                <p className="text-sm text-muted-foreground">IP: {user.ip_address}</p>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-blue-500">IP Addresses:</p>
+                  {loadingIpHistory[user.id] ? (
+                    <p className="text-xs text-muted-foreground">Loading IPs...</p>
+                  ) : ipHistory[user.id] && ipHistory[user.id].length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {ipHistory[user.id].map((ip, index) => (
+                        <Badge key={index} variant="outline" className="font-mono text-xs">
+                          {ip.ip_address}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No IP history</p>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   Created: {new Date(user.created_at).toLocaleDateString()}
                 </p>
@@ -273,7 +315,7 @@ export function AdminUserList() {
             {editingUser === user.id && (
               <div className="space-y-6 pt-4 border-t">
                 <div className="space-y-2">
-                  <Label className="text-blue-500">IP Address History</Label>
+                  <Label className="text-blue-500">Detailed IP Address History</Label>
                   {loadingIpHistory[user.id] ? (
                     <p className="text-sm text-muted-foreground">Loading IP history...</p>
                   ) : ipHistory[user.id] && ipHistory[user.id].length > 0 ? (
@@ -295,7 +337,6 @@ export function AdminUserList() {
                     <p className="text-sm text-muted-foreground">No IP history available</p>
                   )}
                 </div>
-                {/* </CHANGE> */}
 
                 <div className="space-y-2">
                   <Label>Update Password</Label>
