@@ -15,15 +15,12 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const tickStart = Date.now()
 
-    const [resourceResult, buildingResult, unitResult, movementResult, despawnResult, respawnResult] =
-      await Promise.allSettled([
-        processResourceProduction(now),
-        processBuildingProduction(now),
-        processUnitTraining(now),
-        processUnitMovement(now),
-        processHomeBaseDespawn(now),
-        processHomeBaseRespawn(now),
-      ])
+    const [resourceResult, buildingResult, unitResult, movementResult] = await Promise.allSettled([
+      processResourceProduction(now),
+      processBuildingProduction(now),
+      processUnitTraining(now),
+      processUnitMovement(now),
+    ])
 
     const tickDuration = Date.now() - tickStart
 
@@ -37,8 +34,6 @@ export async function GET(request: NextRequest) {
         buildings: buildingResult.status === "fulfilled" ? "success" : "failed",
         units: unitResult.status === "fulfilled" ? "success" : "failed",
         movement: movementResult.status === "fulfilled" ? "success" : "failed",
-        despawn: despawnResult.status === "fulfilled" ? "success" : "failed",
-        respawn: respawnResult.status === "fulfilled" ? "success" : "failed",
       },
     })
   } catch (error) {
@@ -241,52 +236,5 @@ async function processUnitMovement(now: Date) {
         })
         .eq("id", unit.id)
     }
-  }
-}
-
-async function processHomeBaseDespawn(now: Date) {
-  const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
-  const supabase = createServiceRoleClient()
-
-  const { data: result } = await supabase
-    .from("buildings")
-    .update({ is_visible: false })
-    .eq("building_type", "base")
-    .eq("is_visible", true)
-    .in("user_id", supabase.from("users").select("id").lt("last_activity", twoMinutesAgo.toISOString()) as any)
-    .select("id")
-
-  if (result && result.length > 0) {
-    console.log(`[v0] Despawned ${result.length} home bases for offline players`)
-  }
-}
-
-async function processHomeBaseRespawn(now: Date) {
-  const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
-  const supabase = createServiceRoleClient()
-
-  const { data: invisibleBases } = await supabase
-    .from("buildings")
-    .select("id, user_id, world_id, users!inner(last_activity)")
-    .eq("building_type", "base")
-    .eq("is_visible", false)
-    .gte("users.last_activity", twoMinutesAgo.toISOString())
-
-  if (!invisibleBases || invisibleBases.length === 0) return
-
-  console.log(`[v0] Respawning ${invisibleBases.length} home bases for returning players`)
-
-  for (const base of invisibleBases) {
-    const newX = Math.floor(Math.random() * 8000) + 1000
-    const newY = Math.floor(Math.random() * 8000) + 1000
-
-    await supabase
-      .from("buildings")
-      .update({
-        is_visible: true,
-        x: newX,
-        y: newY,
-      })
-      .eq("id", base.id)
   }
 }

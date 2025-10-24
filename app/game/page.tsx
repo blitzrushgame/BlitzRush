@@ -251,6 +251,16 @@ export default function GamePage() {
         newState.camera.x = x
         newState.camera.y = y
         sessionStorage.removeItem("targetCoordinates")
+      } else {
+        const homeBaseResponse = await fetch(`/api/game/home-base/status?userId=${userId}`)
+        if (homeBaseResponse.ok) {
+          const homeBaseData = await homeBaseResponse.json()
+          if (homeBaseData.homeBase) {
+            console.log("[v0] Centering camera on home base at:", homeBaseData.homeBase.x, homeBaseData.homeBase.y)
+            newState.camera.x = homeBaseData.homeBase.x
+            newState.camera.y = homeBaseData.homeBase.y
+          }
+        }
       }
 
       setGameState(newState)

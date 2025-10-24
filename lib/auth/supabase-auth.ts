@@ -81,6 +81,9 @@ export async function signupClient(username: string, email: string, password: st
             access_count: 1,
           })
 
+          console.log("[v0] Creating home base for new user:", newProfile.id)
+          await createHomeBaseOnRegistration(newProfile.id, username)
+
           return { success: true }
         } else {
           console.log("[v0] Profile already exists for this auth user")
@@ -154,8 +157,14 @@ export async function signupClient(username: string, email: string, password: st
     })
 
     console.log("[v0] Registration IP tracked")
+
+    console.log("[v0] Creating home base for new user:", manualProfile.id)
+    await createHomeBaseOnRegistration(manualProfile.id, username)
   } else {
     console.log("[v0] User profile created successfully by trigger")
+
+    console.log("[v0] Creating home base for new user:", profileCheck.id)
+    await createHomeBaseOnRegistration(profileCheck.id, username)
   }
 
   return { success: true }
@@ -236,4 +245,65 @@ export async function loginClient(username: string, password: string, ip: string
 
   console.log("[v0] Login complete")
   return { success: true }
+}
+
+async function createHomeBaseOnRegistration(userId: number, username: string) {
+  try {
+    const WORLD_SIZE_TILES = 2000
+    const BORDER_BUFFER_MIN = 20
+    const BORDER_BUFFER_MAX = 100
+
+    // Calculate spawn coordinates between 20-100 tiles from edge
+    const minCoord = BORDER_BUFFER_MIN
+    const maxCoord = WORLD_SIZE_TILES - BORDER_BUFFER_MIN
+    const spawnRangeMin = BORDER_BUFFER_MIN
+    const spawnRangeMax = BORDER_BUFFER_MAX
+
+    // Randomly choose which edge region to spawn near (but still inside the buffer zone)
+    const edge = Math.floor(Math.random() * 4) // 0=top, 1=right, 2=bottom, 3=left
+    let x: number, y: number
+
+    switch (edge) {
+      case 0: // Top edge
+        x = Math.floor(Math.random() * (maxCoord - minCoord)) + minCoord
+        y = Math.floor(Math.random() * (spawnRangeMax - spawnRangeMin)) + spawnRangeMin
+        break
+      case 1: // Right edge
+        x = WORLD_SIZE_TILES - (Math.floor(Math.random() * (spawnRangeMax - spawnRangeMin)) + spawnRangeMin)
+        y = Math.floor(Math.random() * (maxCoord - minCoord)) + minCoord
+        break
+      case 2: // Bottom edge
+        x = Math.floor(Math.random() * (maxCoord - minCoord)) + minCoord
+        y = WORLD_SIZE_TILES - (Math.floor(Math.random() * (spawnRangeMax - spawnRangeMin)) + spawnRangeMin)
+        break
+      case 3: // Left edge
+        x = Math.floor(Math.random() * (spawnRangeMax - spawnRangeMin)) + spawnRangeMin
+        y = Math.floor(Math.random() * (maxCoord - minCoord)) + minCoord
+        break
+      default:
+        x = spawnRangeMin
+        y = spawnRangeMin
+    }
+
+    console.log("[v0] Creating home base at coordinates:", { x, y, edge })
+
+    const response = await fetch("/api/game/home-base/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        worldId: 1,
+        x,
+        y,
+      }),
+    })
+
+    if (response.ok) {
+      console.log("[v0] Home base created successfully during registration")
+    } else {
+      console.error("[v0] Failed to create home base during registration:", await response.text())
+    }
+  } catch (error) {
+    console.error("[v0] Error creating home base during registration:", error)
+  }
 }

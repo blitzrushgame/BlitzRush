@@ -19,7 +19,7 @@ interface GameCanvasProps {
   initialState: GameStateData
   onStateChange: (state: GameStateData) => void
   worldId: string
-  onMapChange: (mapId: number) => void // Changed from onOpenMapSelector to onMapChange
+  onMapChange: (mapId: number) => void
   currentMap: number
   onSendCoordinateMessage?: (message: string) => void
 }
@@ -29,17 +29,7 @@ export interface GameCanvasRef {
 }
 
 const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
-  (
-    {
-      initialState,
-      onStateChange,
-      worldId,
-      onMapChange, // Updated prop name
-      currentMap,
-      onSendCoordinateMessage,
-    },
-    ref,
-  ) => {
+  ({ initialState, onStateChange, worldId, onMapChange, currentMap, onSendCoordinateMessage }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [gameState, setGameState] = useState<GameStateData>(initialState)
     const [showMapMenu, setShowMapMenu] = useState(false)
@@ -50,6 +40,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     const [userId, setUserId] = useState<number | null>(null)
     const [username, setUsername] = useState<string>("Player")
     const [allianceId, setAllianceId] = useState<number | null>(null)
+    const [homeBaseLocation, setHomeBaseLocation] = useState<{ x: number; y: number; world_id: number } | null>(null)
     const router = useRouter()
 
     const keysRef = useRef<Set<string>>(new Set())
@@ -148,6 +139,27 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
       checkAuth()
     }, [currentMap])
+
+    useEffect(() => {
+      if (!userId) return
+
+      const fetchHomeBase = async () => {
+        try {
+          const response = await fetch(`/api/game/home-base/status?userId=${userId}`)
+          if (response.ok) {
+            const data = await response.json()
+            if (data.homeBase) {
+              console.log("[v0] Home base location loaded:", data.homeBase)
+              setHomeBaseLocation(data.homeBase)
+            }
+          }
+        } catch (error) {
+          console.error("[v0] Error fetching home base location:", error)
+        }
+      }
+
+      fetchHomeBase()
+    }, [userId, currentMap])
 
     useEffect(() => {
       const canvas = canvasRef.current
@@ -309,32 +321,16 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         ctx.filter = "none"
       }
 
-      if (homeBaseRef.current && userId) {
-        const fetchHomeBase = async () => {
-          try {
-            const response = await fetch(`/api/game/home-base/status?userId=${userId}`)
-            if (response.ok) {
-              const data = await response.json()
-              if (data.homeBase && data.homeBase.world_id === currentMap) {
-                const baseTileX = data.homeBase.x
-                const baseTileY = data.homeBase.y
-                const baseWidth = 900 * camera.zoom
-                const baseHeight = 600 * camera.zoom
+      if (homeBaseRef.current && homeBaseLocation && homeBaseLocation.world_id === currentMap) {
+        const baseTileX = homeBaseLocation.x
+        const baseTileY = homeBaseLocation.y
+        const baseWidth = 900 * camera.zoom
+        const baseHeight = 600 * camera.zoom
 
-                const screenX =
-                  (baseTileX - cameraTileX) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2 - baseWidth / 2
-                const screenY =
-                  (baseTileY - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2 - baseHeight / 2
+        const screenX = (baseTileX - cameraTileX) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2 - baseWidth / 2
+        const screenY = (baseTileY - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2 - baseHeight / 2
 
-                ctx.drawImage(homeBaseRef.current!, screenX, screenY, baseWidth, baseHeight)
-              }
-            }
-          } catch (error) {
-            console.error("[v0] Error fetching home base for rendering:", error)
-          }
-        }
-
-        fetchHomeBase()
+        ctx.drawImage(homeBaseRef.current, screenX, screenY, baseWidth, baseHeight)
       }
     }
 
