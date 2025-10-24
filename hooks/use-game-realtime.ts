@@ -24,40 +24,17 @@ export function useGameRealtime({
   onGameStateUpdate,
 }: GameRealtimeOptions) {
   const channelRef = useRef<RealtimeChannel | null>(null)
-  const resourceIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const retryCountRef = useRef(0)
   const maxRetries = 3
   const supabase = createClient()
 
   useEffect(() => {
-    const generateResources = async () => {
-      try {
-        const response = await fetch("/api/game/resources/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, worldId }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          // Resources generated successfully (silent)
-        } else if (response.status === 429) {
-          // Rate limited, this is expected (silent)
-        }
-      } catch (error) {
-        console.error("[v0] Error generating resources:", error)
-      }
-    }
-
-    // Start resource generation immediately, then every 5 seconds
-    generateResources()
-    resourceIntervalRef.current = setInterval(generateResources, 5000)
-
     const setupRealtimeSubscription = () => {
       const channel = supabase.channel(`game-world-${worldId}`, {
         config: {
           broadcast: { self: true },
+          presence: { key: userId.toString() },
         },
       })
 
@@ -72,6 +49,7 @@ export function useGameRealtime({
             filter: `world_id=eq.${worldId}`,
           },
           (payload) => {
+            console.log("[v0] Units update received:", payload.eventType)
             onUnitsUpdate(payload)
           },
         )
@@ -88,6 +66,7 @@ export function useGameRealtime({
             filter: `world_id=eq.${worldId}`,
           },
           (payload) => {
+            console.log("[v0] Buildings update received:", payload.eventType)
             onBuildingsUpdate(payload)
           },
         )
@@ -103,6 +82,7 @@ export function useGameRealtime({
             filter: `user_id=eq.${userId}`,
           },
           (payload) => {
+            console.log("[v0] Resources update received")
             onResourcesUpdate(payload)
           },
         )
@@ -121,6 +101,7 @@ export function useGameRealtime({
           (payload) => {
             const record = payload.new as any
             if (record.attacker_id === userId || record.defender_id === userId) {
+              console.log("[v0] Combat log received")
               onCombatLog(payload)
             }
           },
@@ -151,12 +132,11 @@ export function useGameRealtime({
         if (status === "SUBSCRIBED") {
           console.log(`[v0] Realtime connected for world ${worldId}`)
           setIsConnected(true)
-          retryCountRef.current = 0 // Reset retry count on success
+          retryCountRef.current = 0
         } else if (status === "CHANNEL_ERROR") {
-          console.warn(`[v0] Realtime connection error for world ${worldId}. Game will continue using polling.`)
+          console.warn(`[v0] Realtime connection error for world ${worldId}. Retrying...`)
           setIsConnected(false)
 
-          // Retry if we haven't exceeded max retries
           if (retryCountRef.current < maxRetries) {
             retryCountRef.current++
             console.log(`[v0] Retrying realtime connection (${retryCountRef.current}/${maxRetries})...`)
@@ -165,14 +145,11 @@ export function useGameRealtime({
                 supabase.removeChannel(channelRef.current)
               }
               setupRealtimeSubscription()
-            }, 2000 * retryCountRef.current) // Exponential backoff
+            }, 2000 * retryCountRef.current)
           }
         } else if (status === "TIMED_OUT") {
-          console.warn(`[v0] Realtime subscription timed out for world ${worldId}. Game will continue using polling.`)
+          console.warn(`[v0] Realtime subscription timed out for world ${worldId}. Check Supabase realtime settings.`)
           setIsConnected(false)
-
-          // Don't retry on timeout - it's likely a configuration issue
-          // The game will continue to work via polling
         }
       })
 
@@ -181,13 +158,7 @@ export function useGameRealtime({
 
     setupRealtimeSubscription()
 
-    // Cleanup on unmount or when worldId changes
     return () => {
-      if (resourceIntervalRef.current) {
-        clearInterval(resourceIntervalRef.current)
-        resourceIntervalRef.current = null
-      }
-
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
         channelRef.current = null

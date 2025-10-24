@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { applyResourceProduction } from "@/lib/game/resource-production"
 import { BUILDING_STATS } from "@/lib/game/building-constants"
 import { UNIT_STATS } from "@/lib/game/unit-constants"
 
@@ -14,27 +13,33 @@ export async function GET(request: NextRequest) {
     }
 
     const now = new Date()
+    const tickStart = Date.now()
 
-    // 1. Process resource production for all active players
-    await processResourceProduction(now)
+    const [resourceResult, buildingResult, unitResult, movementResult, despawnResult, respawnResult] =
+      await Promise.allSettled([
+        processResourceProduction(now),
+        processBuildingProduction(now),
+        processUnitTraining(now),
+        processUnitMovement(now),
+        processHomeBaseDespawn(now),
+        processHomeBaseRespawn(now),
+      ])
 
-    // 2. Process building construction/upgrades
-    await processBuildingProduction(now)
-
-    // 3. Process unit training
-    await processUnitTraining(now)
-
-    // 4. Update unit movements
-    await processUnitMovement(now)
-
-    // 5. Process home base despawn/respawn
-    await processHomeBaseDespawn(now)
-    await processHomeBaseRespawn(now)
+    const tickDuration = Date.now() - tickStart
 
     return NextResponse.json({
       success: true,
       timestamp: now.toISOString(),
+      tickDuration: `${tickDuration}ms`,
       message: "Game tick processed successfully",
+      results: {
+        resources: resourceResult.status === "fulfilled" ? "success" : "failed",
+        buildings: buildingResult.status === "fulfilled" ? "success" : "failed",
+        units: unitResult.status === "fulfilled" ? "success" : "failed",
+        movement: movementResult.status === "fulfilled" ? "success" : "failed",
+        despawn: despawnResult.status === "fulfilled" ? "success" : "failed",
+        respawn: respawnResult.status === "fulfilled" ? "success" : "failed",
+      },
     })
   } catch (error) {
     console.error("Error in game tick:", error)
@@ -43,22 +48,86 @@ export async function GET(request: NextRequest) {
 }
 
 async function processResourceProduction(now: Date) {
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
-
+  const fiveSecondsAgo = new Date(now.getTime() - 5 * 1000)
   const supabase = createServiceRoleClient()
 
+  // Get all game states that haven't been updated in the last 5 seconds
   const { data: gameStates } = await supabase
     .from("user_game_states")
-    .select("user_id, world_id, last_played")
-    .lt("last_played", oneHourAgo.toISOString())
+    .select("user_id, world_id, last_updated, game_data")
+    .lt("last_updated", fiveSecondsAgo.toISOString())
 
-  if (!gameStates) return
+  if (!gameStates || gameStates.length === 0) return
+
+  console.log(`[v0] Processing resources for ${gameStates.length} players`)
+
+  const updates = []
 
   for (const state of gameStates) {
     try {
-      await applyResourceProduction(state.user_id, state.world_id, new Date(state.last_played))
+      const lastUpdate = new Date(state.last_updated)
+      const secondsElapsed = (now.getTime() - lastUpdate.getTime()) / 1000
+
+      // Get production rates from buildings
+      const { data: buildings } = await supabase
+        .from("buildings")
+        .select("building_type, level")
+        .eq("user_id", state.user_id)
+        .eq("world_id", state.world_id)
+
+      // Calculate production
+      const productionRates = { concrete: 10, steel: 10, carbon: 10, fuel: 10 }
+
+      buildings?.forEach((building) => {
+        // Apply building bonuses based on type
+        if (building.building_type === "factory") {
+          productionRates.concrete += 5 * building.level
+          productionRates.steel += 5 * building.level
+        } else if (building.building_type === "refinery") {
+          productionRates.carbon += 5 * building.level
+          productionRates.fuel += 5 * building.level
+        }
+      })
+
+      const currentResources = state.game_data?.resources || { concrete: 0, steel: 0, carbon: 0, fuel: 0 }
+      const produced = {
+        concrete: Math.floor((productionRates.concrete * secondsElapsed) / 60),
+        steel: Math.floor((productionRates.steel * secondsElapsed) / 60),
+        carbon: Math.floor((productionRates.carbon * secondsElapsed) / 60),
+        fuel: Math.floor((productionRates.fuel * secondsElapsed) / 60),
+      }
+
+      const updatedResources = {
+        concrete: Math.min(currentResources.concrete + produced.concrete, 100000),
+        steel: Math.min(currentResources.steel + produced.steel, 100000),
+        carbon: Math.min(currentResources.carbon + produced.carbon, 100000),
+        fuel: Math.min(currentResources.fuel + produced.fuel, 100000),
+      }
+
+      updates.push({
+        user_id: state.user_id,
+        world_id: state.world_id,
+        game_data: {
+          ...state.game_data,
+          resources: updatedResources,
+        },
+        last_updated: now.toISOString(),
+      })
     } catch (error) {
-      console.error(`Error applying production for user ${state.user_id}:`, error)
+      console.error(`Error calculating production for user ${state.user_id}:`, error)
+    }
+  }
+
+  if (updates.length > 0) {
+    for (const update of updates) {
+      await supabase
+        .from("user_game_states")
+        .update({
+          game_data: update.game_data,
+          last_updated: update.last_updated,
+        })
+        .eq("user_id", update.user_id)
+        .eq("world_id", update.world_id)
     }
   }
 }
