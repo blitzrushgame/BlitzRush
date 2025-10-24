@@ -19,6 +19,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceRoleClient()
 
+    const { data: userData } = await supabase.from("users").select("username").eq("id", userId).single()
+
+    if (!userData) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
     // Check if user already has a home base
     const { data: existingHomeBase } = await supabase
       .from("buildings")
@@ -47,15 +53,20 @@ export async function POST(request: NextRequest) {
       .from("buildings")
       .insert({
         user_id: userId,
+        owner_username: userData.username,
         world_id: worldId,
         x,
         y,
         building_type: "base",
         is_home_base: true,
         is_visible: true,
+        is_neutral: false,
+        base_type: "home",
         level: 1,
         health: 1000,
         max_health: 1000,
+        turret_count: 0,
+        factory_level: 1,
       })
       .select()
       .single()
@@ -64,6 +75,8 @@ export async function POST(request: NextRequest) {
       console.error("[v0] Error creating home base:", insertError)
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
+
+    await supabase.from("users").update({ home_base_id: homeBase.id }).eq("id", userId)
 
     console.log("[v0] Home base created successfully:", homeBase)
     return NextResponse.json({ homeBase })
