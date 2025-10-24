@@ -34,7 +34,6 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     const [gameState, setGameState] = useState<GameStateData>(initialState)
     const [showMapMenu, setShowMapMenu] = useState(false)
     const grassTileRef = useRef<HTMLImageElement | null>(null)
-    const burnMarkRefs = useRef<(HTMLImageElement | null)[]>([null, null, null, null])
     const homeBaseRef = useRef<HTMLImageElement | null>(null)
     const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 })
     const [userId, setUserId] = useState<number | null>(null)
@@ -84,26 +83,6 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         console.error("[v0] Failed to load grass tile")
       }
       img.src = "/images/grass-tile.png"
-
-      const burnMarkPaths = [
-        "/images/burn-mark-1.png",
-        "/images/burn-mark-2.png",
-        "/images/burn-mark-4.png",
-        "/images/burn-mark-5.png",
-      ]
-
-      burnMarkPaths.forEach((path, index) => {
-        const burnImg = new Image()
-        burnImg.crossOrigin = "anonymous"
-        burnImg.onload = () => {
-          console.log(`[v0] Burn mark ${index + 1} loaded successfully`)
-          burnMarkRefs.current[index] = burnImg
-        }
-        burnImg.onerror = () => {
-          console.error(`[v0] Failed to load burn mark ${index + 1}`)
-        }
-        burnImg.src = path
-      })
 
       const homeBaseImg = new Image()
       homeBaseImg.crossOrigin = "anonymous"
