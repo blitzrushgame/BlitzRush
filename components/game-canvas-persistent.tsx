@@ -123,7 +123,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       homeBaseImg.onerror = () => {
         console.error("[v0] Failed to load home base")
       }
-      homeBaseImg.src = "/images/base/player-info-bar.png"
+      homeBaseImg.src = "/images/base/military-base.png"
     }, [])
 
     useEffect(() => {
@@ -318,7 +318,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
               if (data.homeBase && data.homeBase.world_id === currentMap) {
                 const baseTileX = data.homeBase.x
                 const baseTileY = data.homeBase.y
-                const baseWidth = 800 * camera.zoom
+                const baseWidth = 900 * camera.zoom
                 const baseHeight = 600 * camera.zoom
 
                 const screenX =
@@ -327,42 +327,6 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
                   (baseTileY - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2 - baseHeight / 2
 
                 ctx.drawImage(homeBaseRef.current!, screenX, screenY, baseWidth, baseHeight)
-
-                const factories = [
-                  { x: -180, y: -120, color: "#ff4444", label: "Steel" },
-                  { x: 40, y: -140, color: "#4444ff", label: "Carbon" },
-                  { x: 140, y: 60, color: "#44ff44", label: "Concrete" },
-                  { x: -20, y: 120, color: "#ffaa00", label: "Fuel" },
-                ]
-
-                factories.forEach((factory) => {
-                  const factoryScreenX = screenX + baseWidth / 2 + factory.x * camera.zoom
-                  const factoryScreenY = screenY + baseHeight / 2 + factory.y * camera.zoom
-                  const factorySize = 60 * camera.zoom
-
-                  ctx.fillStyle = factory.color
-                  ctx.fillRect(
-                    factoryScreenX - factorySize / 2,
-                    factoryScreenY - factorySize / 2,
-                    factorySize,
-                    factorySize,
-                  )
-
-                  ctx.strokeStyle = "#ffffff"
-                  ctx.lineWidth = 2
-                  ctx.strokeRect(
-                    factoryScreenX - factorySize / 2,
-                    factoryScreenY - factorySize / 2,
-                    factorySize,
-                    factorySize,
-                  )
-
-                  ctx.fillStyle = "#ffffff"
-                  ctx.font = `${12 * camera.zoom}px Arial`
-                  ctx.textAlign = "center"
-                  ctx.textBaseline = "middle"
-                  ctx.fillText(factory.label, factoryScreenX, factoryScreenY)
-                })
               }
             }
           } catch (error) {
