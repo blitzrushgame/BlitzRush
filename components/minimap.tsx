@@ -70,14 +70,18 @@ export default function Minimap({
       const homeBaseMinimapX = homeBaseLocation.x * scale
       const homeBaseMinimapY = homeBaseLocation.y * scale
 
+      // Draw smaller green circle without white outline
       ctx.fillStyle = "#00ff00"
       ctx.beginPath()
-      ctx.arc(homeBaseMinimapX, homeBaseMinimapY, 6, 0, Math.PI * 2)
+      ctx.arc(homeBaseMinimapX, homeBaseMinimapY, 4, 0, Math.PI * 2)
       ctx.fill()
 
-      ctx.strokeStyle = "#ffffff"
-      ctx.lineWidth = 2
-      ctx.stroke()
+      // Draw "H" label above the circle
+      ctx.fillStyle = "#ffffff"
+      ctx.font = "bold 10px Arial"
+      ctx.textAlign = "center"
+      ctx.textBaseline = "bottom"
+      ctx.fillText("H", homeBaseMinimapX, homeBaseMinimapY - 5)
     }
 
     const viewportWidthTiles = canvasWidth / (64 * camera.zoom)

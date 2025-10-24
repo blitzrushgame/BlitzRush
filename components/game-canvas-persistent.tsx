@@ -303,13 +303,31 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       if (homeBaseRef.current && homeBaseLocation && homeBaseLocation.world_id === currentMap) {
         const baseTileX = homeBaseLocation.x
         const baseTileY = homeBaseLocation.y
-        const baseWidth = 900 * camera.zoom
-        const baseHeight = 600 * camera.zoom
+
+        // Base should span approximately 15 tiles wide and 10 tiles tall
+        const baseTilesWidth = 15
+        const baseTilesHeight = 10
+        const baseWidth = baseTilesWidth * TILE_SIZE_PX * camera.zoom
+        const baseHeight = baseTilesHeight * TILE_SIZE_PX * camera.zoom
 
         const screenX = (baseTileX - cameraTileX) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2 - baseWidth / 2
         const screenY = (baseTileY - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2 - baseHeight / 2
 
+        console.log("[v0] Drawing base at screen coords:", {
+          screenX,
+          screenY,
+          baseWidth,
+          baseHeight,
+          baseTileX,
+          baseTileY,
+        })
+
         ctx.drawImage(homeBaseRef.current, screenX, screenY, baseWidth, baseHeight)
+
+        // Draw a debug border around the base
+        ctx.strokeStyle = "#ff0000"
+        ctx.lineWidth = 3
+        ctx.strokeRect(screenX, screenY, baseWidth, baseHeight)
       }
     }
 
