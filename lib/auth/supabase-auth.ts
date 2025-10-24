@@ -285,7 +285,8 @@ async function createHomeBaseOnRegistration(userId: number, username: string) {
         y = spawnRangeMin
     }
 
-    console.log("[v0] Creating home base at coordinates:", { x, y, edge })
+    console.log("[v0] Creating home base at coordinates:", { x, y, edge, WORLD_SIZE_TILES, minCoord, maxCoord })
+    console.log("[v0] Coordinate validation - X valid:", x >= 20 && x <= 1980, "Y valid:", y >= 20 && y <= 1980)
 
     const response = await fetch("/api/game/home-base/create", {
       method: "POST",
@@ -299,9 +300,11 @@ async function createHomeBaseOnRegistration(userId: number, username: string) {
     })
 
     if (response.ok) {
-      console.log("[v0] Home base created successfully during registration")
+      const result = await response.json()
+      console.log("[v0] Home base created successfully during registration:", result)
     } else {
-      console.error("[v0] Failed to create home base during registration:", await response.text())
+      const errorText = await response.text()
+      console.error("[v0] Failed to create home base during registration:", errorText)
     }
   } catch (error) {
     console.error("[v0] Error creating home base during registration:", error)
