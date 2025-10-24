@@ -300,7 +300,15 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         ctx.filter = "none"
       }
 
-      if (homeBaseRef.current && homeBaseLocation && homeBaseLocation.world_id === currentMap) {
+      console.log("[v0] Base rendering check:", {
+        hasBaseImage: !!homeBaseRef.current,
+        hasBaseLocation: !!homeBaseLocation,
+        baseLocation: homeBaseLocation,
+        currentMap: currentMap,
+        worldIdMatch: homeBaseLocation ? homeBaseLocation.world_id === currentMap : false,
+      })
+
+      if (homeBaseRef.current && homeBaseLocation && Number(homeBaseLocation.world_id) === Number(currentMap)) {
         const baseTileX = homeBaseLocation.x
         const baseTileY = homeBaseLocation.y
 
@@ -310,6 +318,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         const baseWidth = baseTilesWidth * TILE_SIZE_PX * camera.zoom
         const baseHeight = baseTilesHeight * TILE_SIZE_PX * camera.zoom
 
+        // Center the base on its tile coordinates
         const screenX = (baseTileX - cameraTileX) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2 - baseWidth / 2
         const screenY = (baseTileY - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2 - baseHeight / 2
 
@@ -320,14 +329,33 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
           baseHeight,
           baseTileX,
           baseTileY,
+          cameraTileX,
+          cameraTileY,
+          canvasWidth: ctx.canvas.width,
+          canvasHeight: ctx.canvas.height,
         })
 
+        // Draw the base image
         ctx.drawImage(homeBaseRef.current, screenX, screenY, baseWidth, baseHeight)
 
-        // Draw a debug border around the base
-        ctx.strokeStyle = "#ff0000"
-        ctx.lineWidth = 3
+        // Draw a bright debug border around the base so it's impossible to miss
+        ctx.strokeStyle = "#00ff00"
+        ctx.lineWidth = 5
         ctx.strokeRect(screenX, screenY, baseWidth, baseHeight)
+
+        // Draw a center crosshair
+        ctx.strokeStyle = "#ff00ff"
+        ctx.lineWidth = 3
+        const centerX = screenX + baseWidth / 2
+        const centerY = screenY + baseHeight / 2
+        ctx.beginPath()
+        ctx.moveTo(centerX - 20, centerY)
+        ctx.lineTo(centerX + 20, centerY)
+        ctx.moveTo(centerX, centerY - 20)
+        ctx.lineTo(centerX, centerY + 20)
+        ctx.stroke()
+      } else {
+        console.log("[v0] Base NOT being drawn - condition failed")
       }
     }
 
