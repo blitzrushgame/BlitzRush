@@ -10,15 +10,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing userId parameter" }, { status: 400 })
     }
 
+    console.log("[v0] Fetching home base data for userId:", userId)
+
     const supabase = createServiceRoleClient()
 
-    const { data: homeBase } = await supabase
+    const { data: homeBase, error: homeBaseError } = await supabase
       .from("buildings")
       .select("*")
       .eq("user_id", userId)
       .eq("is_home_base", true)
       .eq("is_visible", true)
       .maybeSingle()
+
+    if (homeBaseError) {
+      console.error("[v0] Error fetching home base:", homeBaseError)
+    }
+
+    let userData = null
+    if (homeBase) {
+      const { data: user } = await supabase
+        .from("users")
+        .select("username, alliance_id")
+        .eq("id", homeBase.user_id)
+        .single()
+
+      userData = user
+    }
 
     // Check if user owns any other bases
     const { count: otherBasesCount } = await supabase
@@ -29,8 +46,24 @@ export async function GET(request: NextRequest) {
 
     const canRelocate = (otherBasesCount || 0) === 0
 
+    const formattedHomeBase =
+      homeBase && userData
+        ? {
+            ...homeBase,
+            username: userData.username,
+            alliance_id: userData.alliance_id,
+          }
+        : null
+
+    console.log("[v0] Home base API response:", {
+      homeBase: formattedHomeBase,
+      hasHomeBase: !!homeBase,
+      canRelocate,
+      otherBasesCount: otherBasesCount || 0,
+    })
+
     return NextResponse.json({
-      homeBase: homeBase || null,
+      homeBase: formattedHomeBase,
       hasHomeBase: !!homeBase,
       canRelocate,
       otherBasesCount: otherBasesCount || 0,

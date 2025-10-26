@@ -4,8 +4,10 @@ import type React from "react"
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react"
 import { useRouter } from "next/navigation"
 import type { GameStateData } from "@/lib/types/game"
-import { ChevronDown } from "lucide-react"
+import { Menu } from "lucide-react"
 import Minimap from "./minimap"
+import BaseManagementMenu from "./base-management-menu"
+import FullPageMenu from "./full-page-menu"
 import {
   WORLD_SIZE_TILES,
   TILE_SIZE_PX,
@@ -19,25 +21,42 @@ interface GameCanvasProps {
   initialState: GameStateData
   onStateChange: (state: GameStateData) => void
   worldId: string
-  onMapChange: (mapId: number) => void // Changed from onOpenMapSelector to onMapChange
+  onMapChange: (mapId: number) => void
   currentMap: number
   onSendCoordinateMessage?: (message: string) => void
+  userId?: number | null
 }
 
 export interface GameCanvasRef {
   updateCamera: (x: number, y: number) => void
 }
 
+interface HomeBaseData {
+  x: number
+  y: number
+  world_id: number
+  is_visible: boolean
+  user_id: number
+  username: string
+  alliance_id: number | null
+}
+
+interface DefenseData {
+  defense_type: string
+  level: number
+  count: number
+  damage_multiplier: number
+}
+
+declare global {
+  interface Window {
+    _lastBaseRenderLog?: number
+  }
+}
+
 const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
   (
-    {
-      initialState,
-      onStateChange,
-      worldId,
-      onMapChange, // Updated prop name
-      currentMap,
-      onSendCoordinateMessage,
-    },
+    { initialState, onStateChange, worldId, onMapChange, currentMap, onSendCoordinateMessage, userId: userIdProp },
     ref,
   ) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -46,16 +65,33 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     const grassTileRef = useRef<HTMLImageElement | null>(null)
     const burnMarkRefs = useRef<(HTMLImageElement | null)[]>([null, null, null, null])
     const homeBaseRef = useRef<HTMLImageElement | null>(null)
+    const turretSpritesRef = useRef<{ [key: number]: HTMLImageElement | null }>({
+      1: null,
+      2: null,
+      3: null,
+      4: null,
+    })
     const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 })
-    const [userId, setUserId] = useState<number | null>(null)
     const [username, setUsername] = useState<string>("Player")
     const [allianceId, setAllianceId] = useState<number | null>(null)
+    const homeBaseDataRef = useRef<HomeBaseData | null>(null)
+    const [defenseData, setDefenseData] = useState<DefenseData | null>(null)
+    const turretAnimationRef = useRef<{
+      currentFrame: number
+      lastFrameTime: number
+      nextAnimationTime: number
+    }>({
+      currentFrame: 0,
+      lastFrameTime: 0,
+      nextAnimationTime: 0,
+    })
     const router = useRouter()
-
+    const gameStateRef = useRef<GameStateData>(initialState)
     const keysRef = useRef<Set<string>>(new Set())
-    const gameStateRef = useRef(gameState)
-    const animationFrameRef = useRef<number>()
-    const saveTimeoutRef = useRef<NodeJS.Timeout>()
+    const animationFrameRef = useRef<number | null>(null)
+    const [showUpgradeMenu, setShowUpgradeMenu] = useState(false)
+    const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+    const [showFullMenu, setShowFullMenu] = useState(false)
 
     useImperativeHandle(ref, () => ({
       updateCamera: (x: number, y: number) => {
@@ -117,37 +153,118 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       const homeBaseImg = new Image()
       homeBaseImg.crossOrigin = "anonymous"
       homeBaseImg.onload = () => {
-        console.log("[v0] Home base loaded successfully")
+        console.log("[v0] Home base image loaded successfully")
         homeBaseRef.current = homeBaseImg
       }
       homeBaseImg.onerror = () => {
-        console.error("[v0] Failed to load home base")
+        console.error("[v0] Failed to load home base image")
       }
-      homeBaseImg.src = "/images/base/player-info-bar.png"
+      homeBaseImg.src = "/images/base/BaseLayout.png"
+
+      for (let level = 1; level <= 4; level++) {
+        const turretImg = new Image()
+        turretImg.crossOrigin = "anonymous"
+        turretImg.onload = () => {
+          console.log(`[v0] Turret level ${level} sprite loaded successfully`)
+          turretSpritesRef.current[level] = turretImg
+        }
+        turretImg.onerror = () => {
+          console.error(`[v0] Failed to load turret level ${level} sprite`)
+        }
+        turretImg.src = `/images/defenses/missile-level-${level}.jpeg`
+      }
     }, [])
 
     useEffect(() => {
-      const checkAuth = async () => {
-        const response = await fetch("/api/auth/check")
-        const data = await response.json()
-
-        if (!data.authenticated) {
-          router.push("/")
+      const fetchHomeBaseData = async () => {
+        if (!userIdProp) {
+          console.log("[v0] No userId provided, skipping home base fetch")
           return
         }
 
-        setUserId(Number(data.userId))
-        localStorage.setItem("userId", data.userId.toString())
-        const userResponse = await fetch(`/api/user/${data.userId}`)
-        const userData = await userResponse.json()
-        setUsername(userData.username || "Player")
-        setAllianceId(userData.alliance_id)
+        try {
+          console.log("[v0] Fetching home base data for userId:", userIdProp)
+          const response = await fetch(`/api/game/home-base/status?userId=${userIdProp}`)
 
-        await loadGameState(Number(data.userId), currentMap)
+          if (!response.ok) {
+            console.error("[v0] Failed to fetch home base:", response.status)
+            homeBaseDataRef.current = null
+            return
+          }
+
+          const data = await response.json()
+          console.log("[v0] Home base API response:", data)
+
+          if (data.homeBase) {
+            homeBaseDataRef.current = {
+              x: data.homeBase.x,
+              y: data.homeBase.y,
+              world_id: data.homeBase.world_id,
+              is_visible: data.homeBase.is_visible,
+              user_id: data.homeBase.user_id,
+              username: data.homeBase.username || "Unknown",
+              alliance_id: data.homeBase.alliance_id || null,
+            }
+            console.log("[v0] Home base data set:", homeBaseDataRef.current)
+          } else {
+            console.log("[v0] No home base found in API response")
+            homeBaseDataRef.current = null
+          }
+        } catch (error) {
+          console.error("[v0] Error fetching home base:", error)
+          homeBaseDataRef.current = null
+        }
       }
 
-      checkAuth()
-    }, [currentMap])
+      const fetchDefenseData = async () => {
+        if (!userIdProp) {
+          console.log("[v0] No userId for defense fetch")
+          return
+        }
+
+        try {
+          console.log("[v0] Fetching defense data for userId:", userIdProp)
+          const response = await fetch(`/api/game/base-defenses/status?userId=${userIdProp}`)
+          console.log("[v0] Defense API response status:", response.status)
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error("[v0] Failed to fetch defense data:", response.status, errorText)
+            return
+          }
+
+          const data = await response.json()
+          console.log("[v0] Defense data response:", data)
+
+          if (data.defenses) {
+            console.log("[v0] Setting defenseData state:", data.defenses)
+            setDefenseData(data.defenses)
+          } else {
+            console.log("[v0] No defenses found in API response, creating default")
+            const defaultDefense = {
+              defense_type: "missile",
+              level: 1,
+              count: 2,
+              damage_multiplier: 1.0,
+            }
+            setDefenseData(defaultDefense)
+          }
+        } catch (error) {
+          console.error("[v0] Error fetching defense data:", error)
+          const defaultDefense = {
+            defense_type: "missile",
+            level: 1,
+            count: 2,
+            damage_multiplier: 1.0,
+          }
+          console.log("[v0] Setting default defenseData due to error:", defaultDefense)
+          setDefenseData(defaultDefense)
+        }
+      }
+
+      fetchHomeBaseData()
+      fetchDefenseData()
+    }, [userIdProp, currentMap])
 
     useEffect(() => {
       const canvas = canvasRef.current
@@ -242,6 +359,16 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       }
     }, [])
 
+    const getNameplateColor = (baseOwnerId: number, baseAllianceId: number | null): string => {
+      if (baseOwnerId === userIdProp) {
+        return "#22c55e" // Green for own base
+      }
+      if (baseAllianceId && baseAllianceId === allianceId) {
+        return "#3b82f6" // Blue for alliance members
+      }
+      return "#ef4444" // Red for enemies
+    }
+
     const drawIsometricTerrain = (ctx: CanvasRenderingContext2D, camera: { x: number; y: number; zoom: number }) => {
       const cameraTileX = camera.x
       const cameraTileY = camera.y
@@ -299,8 +426,8 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
         for (let x = grassStartX; x < grassEndX; x += GRASS_PNG_SIZE_TILES) {
           for (let y = grassStartY; y < grassEndY; y += GRASS_PNG_SIZE_TILES) {
-            const screenX = (x - cameraTileX) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2
-            const screenY = (y - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2
+            const screenX = (x - camera.x) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2
+            const screenY = (y - camera.y) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2
 
             ctx.drawImage(grassTileRef.current, screenX, screenY, grassPngSizePx, grassPngSizePx)
           }
@@ -309,68 +436,152 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         ctx.filter = "none"
       }
 
-      if (homeBaseRef.current && userId) {
-        const fetchHomeBase = async () => {
-          try {
-            const response = await fetch(`/api/game/home-base/status?userId=${userId}`)
-            if (response.ok) {
-              const data = await response.json()
-              if (data.homeBase && data.homeBase.world_id === currentMap) {
-                const baseTileX = data.homeBase.x
-                const baseTileY = data.homeBase.y
-                const baseWidth = 800 * camera.zoom
-                const baseHeight = 600 * camera.zoom
+      if (homeBaseRef.current && homeBaseDataRef.current) {
+        const homeBaseData = homeBaseDataRef.current
 
-                const screenX =
-                  (baseTileX - cameraTileX) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2 - baseWidth / 2
-                const screenY =
-                  (baseTileY - cameraTileY) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2 - baseHeight / 2
+        if (homeBaseData.world_id === currentMap && homeBaseData.is_visible) {
+          const baseTileX = homeBaseData.x
+          const baseTileY = homeBaseData.y
+          const baseWidth = 800 * camera.zoom
+          const baseHeight = 600 * camera.zoom
 
-                ctx.drawImage(homeBaseRef.current!, screenX, screenY, baseWidth, baseHeight)
+          const screenX = (baseTileX - camera.x) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2 - baseWidth / 2
+          const screenY = (baseTileY - camera.y) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2 - baseHeight / 2
 
-                const factories = [
-                  { x: -180, y: -120, color: "#ff4444", label: "Steel" },
-                  { x: 40, y: -140, color: "#4444ff", label: "Carbon" },
-                  { x: 140, y: 60, color: "#44ff44", label: "Concrete" },
-                  { x: -20, y: 120, color: "#ffaa00", label: "Fuel" },
+          ctx.drawImage(homeBaseRef.current, screenX, screenY, baseWidth, baseHeight)
+
+          if (defenseData && turretSpritesRef.current[defenseData.level]) {
+            const turretSprite = turretSpritesRef.current[defenseData.level]
+
+            if (turretSprite) {
+              const now = Date.now()
+              const animState = turretAnimationRef.current
+
+              if (now >= animState.nextAnimationTime) {
+                const frameRanges = [
+                  [0, 5],
+                  [6, 11],
+                  [12, 17],
+                  [18, 23],
+                  [24, 29],
+                  [30, 35],
                 ]
+                const randomRange = frameRanges[Math.floor(Math.random() * frameRanges.length)]
+                animState.currentFrame =
+                  randomRange[0] + Math.floor(Math.random() * (randomRange[1] - randomRange[0] + 1))
+                animState.nextAnimationTime = now + 2000 + Math.random() * 3000
+              }
 
-                factories.forEach((factory) => {
-                  const factoryScreenX = screenX + baseWidth / 2 + factory.x * camera.zoom
-                  const factoryScreenY = screenY + baseHeight / 2 + factory.y * camera.zoom
-                  const factorySize = 60 * camera.zoom
+              const turretSize = 40 * camera.zoom
+              const gridCols = 5
+              const gridSpacing = 60 * camera.zoom
+              const gridOffsetX = screenX + baseWidth / 2 - (gridCols * gridSpacing) / 2
+              const gridOffsetY = screenY + baseHeight * 0.85
 
-                  ctx.fillStyle = factory.color
-                  ctx.fillRect(
-                    factoryScreenX - factorySize / 2,
-                    factoryScreenY - factorySize / 2,
-                    factorySize,
-                    factorySize,
-                  )
+              const currentFrame = animState.currentFrame
+              const frameX = (currentFrame % 6) * (turretSprite.width / 6)
+              const frameY = Math.floor(currentFrame / 6) * (turretSprite.height / 6)
+              const frameWidth = turretSprite.width / 6
+              const frameHeight = turretSprite.height / 6
 
-                  ctx.strokeStyle = "#ffffff"
-                  ctx.lineWidth = 2
-                  ctx.strokeRect(
-                    factoryScreenX - factorySize / 2,
-                    factoryScreenY - factorySize / 2,
-                    factorySize,
-                    factorySize,
-                  )
+              for (let i = 0; i < defenseData.count; i++) {
+                const col = i % gridCols
+                const row = Math.floor(i / gridCols)
+                const turretX = gridOffsetX + col * gridSpacing
+                const turretY = gridOffsetY + row * gridSpacing
 
-                  ctx.fillStyle = "#ffffff"
-                  ctx.font = `${12 * camera.zoom}px Arial`
-                  ctx.textAlign = "center"
-                  ctx.textBaseline = "middle"
-                  ctx.fillText(factory.label, factoryScreenX, factoryScreenY)
-                })
+                ctx.drawImage(
+                  turretSprite,
+                  frameX,
+                  frameY,
+                  frameWidth,
+                  frameHeight,
+                  turretX - turretSize / 2,
+                  turretY - turretSize / 2,
+                  turretSize,
+                  turretSize,
+                )
               }
             }
-          } catch (error) {
-            console.error("[v0] Error fetching home base for rendering:", error)
+          }
+
+          const nameplateY = screenY + baseHeight * 0.7 + 40 * camera.zoom
+          const nameplateColor = getNameplateColor(homeBaseData.user_id, homeBaseData.alliance_id)
+
+          ctx.font = `bold ${32 * camera.zoom}px Arial`
+          ctx.textAlign = "center"
+          ctx.textBaseline = "middle"
+          ctx.letterSpacing = `${3 * camera.zoom}px`
+          const displayName = homeBaseData.username.toUpperCase()
+          const nameplateX = screenX + baseWidth / 2
+
+          const extrusionDepth = 8
+          const layerOffset = 1 * camera.zoom
+
+          const parseColor = (hex: string) => {
+            const r = Number.parseInt(hex.slice(1, 3), 16)
+            const g = Number.parseInt(hex.slice(3, 5), 16)
+            const b = Number.parseInt(hex.slice(5, 7), 16)
+            return { r, g, b }
+          }
+
+          const rgb = parseColor(nameplateColor)
+          const darkenFactor = 0.6
+          const layerColor = `rgb(${Math.floor(rgb.r * darkenFactor)}, ${Math.floor(rgb.g * darkenFactor)}, ${Math.floor(rgb.b * darkenFactor)})`
+
+          const frontFactor = 0.85
+          const frontColor = `rgb(${Math.floor(rgb.r * frontFactor)}, ${Math.floor(rgb.g * frontFactor)}, ${Math.floor(rgb.b * frontFactor)})`
+
+          ctx.lineWidth = 1.5 * camera.zoom
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.9)"
+
+          for (let i = extrusionDepth; i > 0; i--) {
+            const layerY = nameplateY - i * layerOffset
+            ctx.strokeText(displayName, nameplateX, layerY)
+            ctx.fillStyle = layerColor
+            ctx.fillText(displayName, nameplateX, layerY)
+          }
+
+          ctx.strokeText(displayName, nameplateX, nameplateY)
+          ctx.fillStyle = frontColor
+          ctx.fillText(displayName, nameplateX, nameplateY)
+
+          const textMetrics = ctx.measureText(displayName)
+          const textWidth = textMetrics.width
+          const textHeight = 32 * camera.zoom
+
+          for (let i = 0; i < 50; i++) {
+            const noiseX = nameplateX - textWidth / 2 + Math.random() * textWidth
+            const noiseY = nameplateY - textHeight / 2 + Math.random() * textHeight
+            const noiseSize = Math.random() * 2 * camera.zoom
+            const noiseAlpha = Math.random() * 0.3
+
+            ctx.fillStyle = `rgba(0, 0, 0, ${noiseAlpha})`
+            ctx.fillRect(noiseX, noiseY, noiseSize, noiseSize)
+          }
+        } else {
+          if (!window._lastBaseRenderLog || Date.now() - window._lastBaseRenderLog > 1000) {
+            console.log(
+              "[v0] Base not rendering - world_id:",
+              homeBaseDataRef.current?.world_id,
+              "currentMap:",
+              currentMap,
+              "is_visible:",
+              homeBaseDataRef.current?.is_visible,
+            )
+            window._lastBaseRenderLog = Date.now()
           }
         }
-
-        fetchHomeBase()
+      } else {
+        if (!window._lastBaseRenderLog || Date.now() - window._lastBaseRenderLog > 1000) {
+          console.log(
+            "[v0] Base not rendering - homeBaseRef:",
+            !!homeBaseRef.current,
+            "homeBaseDataRef:",
+            !!homeBaseDataRef.current,
+          )
+          window._lastBaseRenderLog = Date.now()
+        }
       }
     }
 
@@ -382,12 +593,23 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       const y = e.clientY - rect.top
 
       if (e.button === 0) {
-        setGameState((prev) => ({
-          ...prev,
-          isSelecting: true,
-          selectionBox: { start: { x, y }, end: { x, y } },
-        }))
+        // Left click
+        const isOverBase = isMouseOverBase(x, y, gameState.camera)
+
+        if (isOverBase) {
+          setShowUpgradeMenu((prev) => !prev)
+        } else {
+          setShowUpgradeMenu(false)
+
+          // Start selection box
+          setGameState((prev) => ({
+            ...prev,
+            isSelecting: true,
+            selectionBox: { start: { x, y }, end: { x, y } },
+          }))
+        }
       } else if (e.button === 2) {
+        // Right click for dragging
         setGameState((prev) => ({
           ...prev,
           isDragging: true,
@@ -402,6 +624,8 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
+
+      setMousePosition({ x, y })
 
       if (gameState.isSelecting && gameState.selectionBox.start) {
         setGameState((prev) => ({
@@ -464,7 +688,6 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
     const handleMapSelect = (mapId: number) => {
       onMapChange(mapId)
-      setShowMapMenu(false)
     }
 
     const handleCameraMove = (x: number, y: number) => {
@@ -485,8 +708,57 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     const totalMaps = 10
     const maps = Array.from({ length: totalMaps }, (_, i) => i + 1)
 
-    const loadGameState = async (userId: number, mapId: number) => {
-      // Placeholder for loadGameState logic
+    const isMouseOverBase = (
+      mouseX: number,
+      mouseY: number,
+      camera: { x: number; y: number; zoom: number },
+    ): boolean => {
+      if (!homeBaseDataRef.current) {
+        return false
+      }
+
+      const homeBaseData = homeBaseDataRef.current
+      if (homeBaseData.world_id !== currentMap || !homeBaseData.is_visible) {
+        return false
+      }
+
+      const baseTileX = homeBaseData.x
+      const baseTileY = homeBaseData.y
+      const baseWidth = 800 * camera.zoom
+      const baseHeight = 600 * camera.zoom
+
+      const screenX = (baseTileX - camera.x) * TILE_SIZE_PX * camera.zoom + canvasDimensions.width / 2 - baseWidth / 2
+      const screenY = (baseTileY - camera.y) * TILE_SIZE_PX * camera.zoom + canvasDimensions.height / 2 - baseHeight / 2
+
+      return mouseX >= screenX && mouseX <= screenX + baseWidth && mouseY >= screenY && mouseY <= screenY + baseHeight
+    }
+
+    const handleUpgrade = async (type: "count" | "level") => {
+      if (!userIdProp) return
+
+      try {
+        const response = await fetch("/api/game/base-defenses/upgrade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: userIdProp,
+            upgradeType: type,
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          console.error("[v0] Upgrade failed:", error.error)
+          return
+        }
+
+        const data = await response.json()
+        if (data.defenses) {
+          setDefenseData(data.defenses)
+        }
+      } catch (error) {
+        console.error("[v0] Error upgrading defenses:", error)
+      }
     }
 
     return (
@@ -501,125 +773,56 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
           tabIndex={0}
         />
 
+        {console.log("[v0] Render check - defenseData:", defenseData, "showUpgradeMenu:", showUpgradeMenu)}
+        {homeBaseDataRef.current && (
+          <BaseManagementMenu
+            isVisible={showUpgradeMenu}
+            onClose={() => setShowUpgradeMenu(false)}
+            baseData={{
+              userId: homeBaseDataRef.current.user_id,
+              username: homeBaseDataRef.current.username,
+              x: homeBaseDataRef.current.x,
+              y: homeBaseDataRef.current.y,
+            }}
+            currentUserId={userIdProp || 0}
+            defenseData={defenseData || { defense_type: "missile", level: 1, count: 2, damage_multiplier: 1.0 }}
+            onUpgrade={handleUpgrade}
+          />
+        )}
+
         <Minimap
           camera={gameState.camera}
           canvasWidth={canvasDimensions.width}
           canvasHeight={canvasDimensions.height}
           currentMap={currentMap}
           onCameraMove={handleCameraMove}
-          userId={userId}
+          userId={userIdProp}
           username={username}
           allianceId={allianceId}
         />
 
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div
-            className="transition-transform duration-500 ease-out pointer-events-auto"
-            style={{
-              transform: showMapMenu ? "translateY(0)" : "translateY(calc(-100% + 50px))",
-            }}
-          >
-            <div
-              className="bg-neutral-800/95 backdrop-blur-md border-x border-b border-neutral-600/30 shadow-2xl"
-              style={{ width: "900px" }}
-            >
-              <div className="p-6">
-                <div className="mb-4 flex justify-between items-center px-4">
-                  <a
-                    href="/alliance"
-                    className="inline-block px-6 py-2 bg-neutral-700/50 hover:bg-neutral-600/50 border border-amber-500/30 rounded text-amber-400 font-semibold transition-all hover:shadow-lg hover:shadow-amber-500/20"
-                  >
-                    ALLIANCE
-                  </a>
-                  <a
-                    href="/profile"
-                    className="inline-block px-6 py-2 bg-neutral-700/50 hover:bg-neutral-600/50 border border-amber-500/30 rounded text-amber-400 font-semibold transition-all hover:shadow-lg hover:shadow-amber-500/20"
-                  >
-                    PROFILE
-                  </a>
-                </div>
-
-                <div className="grid grid-cols-10 gap-3">
-                  {maps.map((mapId) => (
-                    <button
-                      key={mapId}
-                      onClick={() => handleMapSelect(mapId)}
-                      className={`
-                      aspect-square rounded-lg font-bold text-lg transition-all
-                      ${
-                        mapId === currentMap
-                          ? "bg-amber-500 hover:bg-amber-600 text-white border-2 border-amber-400 shadow-lg shadow-amber-500/50"
-                          : "bg-neutral-700/50 hover:bg-neutral-600/50 text-neutral-300 border-2 border-neutral-600/50"
-                      }
-                    `}
-                    >
-                      {mapId}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-neutral-400 text-sm text-center mt-4">Currently on Map {currentMap}</p>
-              </div>
-            </div>
-
-            <div className="flex justify-center">
+        <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
+          <div className="flex justify-center pointer-events-auto">
+            <div className="bg-neutral-800/90 backdrop-blur-md border-b border-x border-amber-500 rounded-b-xl px-8 py-2 shadow-lg w-full flex justify-center">
               <button
-                onClick={() => setShowMapMenu(!showMapMenu)}
-                className="relative bg-neutral-800/95 backdrop-blur-md hover:bg-neutral-700/95 transition-all duration-300 shadow-xl group"
-                style={{
-                  width: "200px",
-                  height: "50px",
-                  clipPath: "polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%)",
-                }}
+                onClick={() => setShowFullMenu(true)}
+                className="flex items-center gap-2 text-amber-400 hover:text-amber-300 transition-colors"
+                aria-label="Open menu"
               >
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    clipPath: "polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%)",
-                  }}
-                >
-                  <svg
-                    className="absolute inset-0 w-full h-full"
-                    style={{ overflow: "visible" }}
-                    preserveAspectRatio="none"
-                  >
-                    <path
-                      d="M 0 0 L 200 0 L 180 50 L 20 50 Z"
-                      fill="none"
-                      stroke="#eab308"
-                      strokeWidth="2"
-                      vectorEffect="non-scaling-stroke"
-                      style={{
-                        strokeDasharray: "200 200 180",
-                        strokeDashoffset: "0",
-                      }}
-                    />
-                  </svg>
-                </div>
-
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-amber-400 font-bold text-sm">MENU</span>
-                  <div className="flex gap-1 mt-0.5">
-                    <ChevronDown
-                      className={`w-3 h-3 text-amber-400 transition-transform duration-300 ${
-                        showMapMenu ? "rotate-180" : ""
-                      }`}
-                    />
-                    <ChevronDown
-                      className={`w-3 h-3 text-amber-400 transition-transform duration-300 ${
-                        showMapMenu ? "rotate-180" : ""
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                <div
-                  className="absolute inset-0 bg-amber-500/0 group-hover:bg-amber-500/10 transition-colors duration-300"
-                  style={{ clipPath: "polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%)" }}
-                />
+                <Menu className="w-5 h-5" />
+                <span className="font-bold text-sm">MENU</span>
               </button>
             </div>
           </div>
         </div>
+
+        {/* Full-page menu overlay */}
+        <FullPageMenu
+          isVisible={showFullMenu}
+          onClose={() => setShowFullMenu(false)}
+          currentMap={currentMap}
+          onMapSelect={handleMapSelect}
+        />
       </div>
     )
   },

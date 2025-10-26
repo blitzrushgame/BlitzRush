@@ -28,7 +28,7 @@ export default function Minimap({
   const minimapRef = useRef<HTMLCanvasElement>(null)
   const [homeBaseLocation, setHomeBaseLocation] = useState<{ x: number; y: number } | null>(null)
 
-  const minimapSize = 250
+  const minimapSize = 200
 
   useEffect(() => {
     const fetchHomeBase = async () => {
@@ -74,10 +74,6 @@ export default function Minimap({
       ctx.beginPath()
       ctx.arc(homeBaseMinimapX, homeBaseMinimapY, 6, 0, Math.PI * 2)
       ctx.fill()
-
-      ctx.strokeStyle = "#ffffff"
-      ctx.lineWidth = 2
-      ctx.stroke()
     }
 
     const viewportWidthTiles = canvasWidth / (64 * camera.zoom)
@@ -116,7 +112,7 @@ export default function Minimap({
   }
 
   return (
-    <div className="fixed top-4 right-4 z-50 w-fit pointer-events-none">
+    <div className="fixed top-16 right-4 z-50 w-fit pointer-events-none">
       <div className="bg-black/90 border-2 border-amber-500/50 rounded-lg shadow-2xl p-2 pointer-events-auto">
         <div className="flex justify-between items-center px-2 mb-1">
           <span className="text-amber-400 font-bold text-sm">MAP {currentMap}</span>

@@ -353,6 +353,7 @@ export default function GamePage() {
           onMapChange={handleMapChange}
           currentMap={currentMap}
           onSendCoordinateMessage={handleSendCoordinateMessage}
+          userId={userId}
         />
       )}
 
