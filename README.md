@@ -1,6 +1,6 @@
-# BlitzRush - Real-Time Strategy Game
+# BlitzRush
 
-A browser-based real-time strategy game built with Next.js, featuring base building, unit management, alliances, and real-time combat.
+The git repository for BlitzRush
 
 ## 📁 Project Structure
 
