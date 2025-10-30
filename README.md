@@ -134,7 +134,3 @@ This codebase is organized for easy navigation:
 - All game components are in `components/game/`
 - All API routes follow RESTful patterns in `app/api/`
 - Database migrations are numbered sequentially in `scripts/`
-
-## 📝 License
-
-[Your License Here]
