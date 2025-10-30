@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import GameCanvas, { type GameCanvasRef } from "@/components/game-canvas-persistent"
-import { GameChat, type GameChatRef } from "@/components/game-chat"
+import GameCanvas, { type GameCanvasRef } from "@/components/game/canvas"
+import { GameChat, type GameChatRef } from "@/components/chat/game-chat"
 import type { GameStateData } from "@/lib/types/game"
 import { useGameRealtime } from "@/hooks/use-game-realtime"
 import { WORLD_SIZE_TILES } from "@/lib/game/constants"

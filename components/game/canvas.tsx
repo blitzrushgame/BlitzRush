@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation"
 import type { GameStateData } from "@/lib/types/game"
 import { Menu } from "lucide-react"
 import Minimap from "./minimap"
-import BaseManagementMenu from "./base-management-menu"
-import FullPageMenu from "./full-page-menu"
+import BaseManagementMenu from "./menus/base-management"
+import FullPageMenu from "./menus/main-menu"
 import {
   WORLD_SIZE_TILES,
   TILE_SIZE_PX,

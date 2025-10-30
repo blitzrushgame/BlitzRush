@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth/simple-auth"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import AllianceManagement from "@/components/alliance-management"
-import AllianceLeaderboard from "@/components/alliance-leaderboard"
+import AllianceManagement from "@/components/alliance/management"
+import AllianceLeaderboard from "@/components/alliance/leaderboard"
 
 export default async function AlliancePage() {
   const user = await getCurrentUser()
