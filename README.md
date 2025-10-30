@@ -127,10 +127,9 @@ The git repository for BlitzRush
 
 The admin panel is located in the `admin-panel/` directory and should be deployed as a separate Vercel project. See `admin-panel/README.md` for details.
 
-## 🤝 Contributing
+## 🤝 Contributers
 
-This codebase is organized for easy navigation:
-- All game logic is in `lib/game/`
-- All game components are in `components/game/`
-- All API routes follow RESTful patterns in `app/api/`
-- Database migrations are numbered sequentially in `scripts/`
+Mynx
+Schousboe
+
+Ellie
