@@ -5,53 +5,57 @@ A browser-based real-time strategy game built with Next.js, featuring base build
 ## 📁 Project Structure
 
 \`\`\`
-├── app/                          # Next.js App Router pages
-│   ├── alliance/                 # Alliance management pages
-│   ├── api/                      # API routes
-│   │   ├── alliance/            # Alliance operations
-│   │   ├── auth/                # Authentication
-│   │   ├── chat/                # Chat system
-│   │   ├── game/                # Game mechanics
-│   │   └── profile/             # User profiles
-│   ├── game/                    # Main game page
-│   └── profile/                 # User profile page
+BlitzRush/
 │
-├── components/                   # React components
-│   ├── alliance/                # Alliance-related components
-│   ├── chat/                    # Chat components
-│   ├── game/                    # Game components
-│   │   ├── canvas.tsx           # Main game canvas
-│   │   ├── minimap.tsx          # Minimap display
-│   │   └── menus/               # Game menus
-│   └── ui/                      # Reusable UI components (shadcn/ui)
+├── app/                                    # Next.js App Router
+│   ├── alliance/                          # Alliance management pages
+│   ├── game/                              # Main game page
+│   ├── profile/                           # User profile page
+│   └── api/                               # API routes
+│       ├── alliance/                      # Alliance operations
+│       ├── auth/                          # Authentication
+│       ├── chat/                          # Chat system
+│       ├── game/                          # Game mechanics
+│       └── profile/                       # User profiles
 │
-├── lib/                         # Utility libraries
-│   ├── auth/                    # Authentication utilities
-│   ├── game/                    # Game logic and constants
-│   │   ├── building-constants.ts
-│   │   ├── combat-utils.ts
-│   │   ├── constants.ts
-│   │   ├── movement-utils.ts
-│   │   ├── resource-constants.ts
-│   │   └── unit-constants.ts
-│   ├── supabase/                # Supabase client configurations
-│   └── types/                   # TypeScript type definitions
+├── components/                             # React components
+│   ├── game/                              # Game-specific components
+│   │   ├── canvas.tsx                     # Main game canvas
+│   │   ├── minimap.tsx                    # Minimap display
+│   │   └── menus/                         # Game menus
+│   │       ├── base-management.tsx        # Base building UI
+│   │       └── main-menu.tsx              # Main menu overlay
+│   ├── alliance/                          # Alliance components
+│   ├── chat/                              # Chat components
+│   └── ui/                                # Reusable UI (shadcn/ui)
 │
-├── hooks/                       # Custom React hooks
-│   ├── use-buildings.ts         # Building management
-│   ├── use-combat.ts            # Combat system
-│   ├── use-game-realtime.ts     # Real-time game updates
-│   ├── use-home-base.ts         # Home base management
-│   ├── use-units.ts             # Unit management
-│   └── use-unit-movement.ts     # Unit movement
+├── lib/                                    # Utility libraries
+│   ├── game/                              # Game logic & constants
+│   │   ├── constants.ts                   # Core game settings
+│   │   ├── building-constants.ts          # Building definitions
+│   │   ├── unit-constants.ts              # Unit definitions
+│   │   ├── combat-utils.ts                # Combat calculations
+│   │   ├── movement-utils.ts              # Unit movement
+│   │   └── resource-constants.ts          # Resource settings
+│   ├── auth/                              # Authentication utilities
+│   ├── supabase/                          # Database client config
+│   └── types/                             # TypeScript definitions
 │
-├── scripts/                     # Database migration scripts
-│   └── *.sql                    # SQL migration files
+├── hooks/                                  # Custom React hooks
+│   ├── use-game-realtime.ts               # Real-time updates
+│   ├── use-buildings.ts                   # Building management
+│   ├── use-units.ts                       # Unit management
+│   ├── use-combat.ts                      # Combat system
+│   ├── use-home-base.ts                   # Home base state
+│   └── use-unit-movement.ts               # Unit movement
 │
-├── public/                      # Static assets
-│   └── images/                  # Game images and sprites
+├── scripts/                                # Database migrations
+│   └── *.sql                              # SQL migration files
 │
-└── admin-panel/                 # Separate admin panel (deploy independently)
+├── public/                                 # Static assets
+│   └── images/                            # Game sprites & images
+│
+└── admin-panel/                            # Admin panel (separate deploy)
 \`\`\`
 
 ## 🚀 Getting Started
