@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { X } from "lucide-react"
+import { HowitzerPreview } from "../howitzer-preview"
+import { APCPreview } from "../apc-preview"
 
 interface BaseManagementMenuProps {
   isVisible: boolean
@@ -19,6 +21,7 @@ interface BaseManagementMenuProps {
     damage_multiplier: number
   }
   onUpgrade?: (type: "count" | "level") => Promise<void>
+  onSpawnTroop?: (troopType: string) => void
 }
 
 export function BaseManagementMenu({
@@ -28,21 +31,13 @@ export function BaseManagementMenu({
   currentUserId,
   defenseData,
   onUpgrade,
+  onSpawnTroop,
 }: BaseManagementMenuProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
-  const [currentFrame, setCurrentFrame] = useState(0)
   const [activeTab, setActiveTab] = useState<"defenses" | "troops" | "buildings" | "factory">("defenses")
   const [isUpgrading, setIsUpgrading] = useState(false)
 
   const isOwnBase = baseData.userId === currentUserId
-
-  // Animate sprite rotation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentFrame((prev) => (prev + 1) % 36)
-    }, 100)
-    return () => clearInterval(interval)
-  }, [])
 
   const handleUpgrade = async (type: "count" | "level") => {
     if (!onUpgrade || !isOwnBase) return
@@ -67,7 +62,12 @@ export function BaseManagementMenu({
       }
       return "Manage your base defenses. Turrets automatically engage enemy units within range."
     } else if (activeTab === "troops") {
-      return "Train and manage your military units. (Coming soon)"
+      if (hoveredItem === "spawn-howitzer") {
+        return "Deploy a Howitzer artillery unit. Heavy armored vehicle with powerful long-range capabilities. Features independently rotating turret for 360° firing arc. Drag-select troops and right-click to move."
+      } else if (hoveredItem === "spawn-apc") {
+        return "Deploy an APC (Armored Personnel Carrier) for base capture missions. Move the APC to an unclaimed base and it will capture the base for you. The APC will be destroyed upon successful capture. Speed: 1 tile/sec, Health: 20."
+      }
+      return "Train and deploy military units. Drag to select troops, right-click to move them."
     } else if (activeTab === "buildings") {
       return "Upgrade base structures and facilities. (Coming soon)"
     } else if (activeTab === "factory") {
@@ -140,16 +140,15 @@ export function BaseManagementMenu({
                 onMouseLeave={() => setHoveredItem(null)}
                 onClick={() => handleUpgrade("count")}
                 disabled={!isOwnBase || defenseData.count >= 30 || isUpgrading}
-                className="group relative bg-neutral-600/50 hover:bg-neutral-500/70 border-2 border-neutral-500/50 hover:border-amber-500/50 rounded-lg p-3 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed aspect-square flex flex-col items-center justify-center"
+                className="group relative bg-neutral-600/50 hover:bg-neutral-500/70 border-2 border-neutral-500/50 hover:border-amber-500/50 rounded-lg p-2 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed aspect-square flex flex-col items-center justify-center"
               >
-                <div
-                  className="w-12 h-12 bg-contain bg-no-repeat bg-center mb-1"
-                  style={{
-                    backgroundImage: `url(/images/defenses/missile-level-${defenseData.level}.jpeg)`,
-                    backgroundPosition: `${(currentFrame % 6) * -100}% ${Math.floor(currentFrame / 6) * -100}%`,
-                    backgroundSize: "600% 600%",
-                  }}
-                />
+                <div className="w-[90px] h-[90px] mb-1 flex items-center justify-center">
+                  <img
+                    src="/images/turrets/level-1-turret.gif"
+                    alt="Level 1 Turret"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
                 <span className="text-[10px] font-mono text-amber-300 text-center">ADD TURRET</span>
                 <span className="text-[10px] font-mono text-amber-400">{defenseData.count}/30</span>
               </button>
@@ -160,16 +159,15 @@ export function BaseManagementMenu({
                 onMouseLeave={() => setHoveredItem(null)}
                 onClick={() => handleUpgrade("level")}
                 disabled={!isOwnBase || defenseData.level >= 4 || isUpgrading}
-                className="group relative bg-neutral-600/50 hover:bg-neutral-500/70 border-2 border-neutral-500/50 hover:border-amber-500/50 rounded-lg p-3 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed aspect-square flex flex-col items-center justify-center"
+                className="group relative bg-neutral-600/50 hover:bg-neutral-500/70 border-2 border-neutral-500/50 hover:border-amber-500/50 rounded-lg p-2 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed aspect-square flex flex-col items-center justify-center"
               >
-                <div
-                  className="w-12 h-12 bg-contain bg-no-repeat bg-center mb-1"
-                  style={{
-                    backgroundImage: `url(/images/defenses/missile-level-${Math.min(defenseData.level + 1, 4)}.jpeg)`,
-                    backgroundPosition: `${(currentFrame % 6) * -100}% ${Math.floor(currentFrame / 6) * -100}%`,
-                    backgroundSize: "600% 600%",
-                  }}
-                />
+                <div className="w-[90px] h-[90px] mb-1 flex items-center justify-center">
+                  <img
+                    src="/images/turrets/level-1-turret.gif"
+                    alt="Next Level Turret"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
                 <span className="text-[10px] font-mono text-amber-300 text-center">UPGRADE</span>
                 <span className="text-[10px] font-mono text-amber-400">
                   Lv{defenseData.level}→{defenseData.level + 1}
@@ -190,12 +188,42 @@ export function BaseManagementMenu({
 
           {activeTab === "troops" && (
             <div className="grid grid-cols-5 gap-2">
-              {Array.from({ length: 25 }).map((_, i) => (
+              <button
+                onMouseEnter={() => setHoveredItem("spawn-howitzer")}
+                onMouseLeave={() => setHoveredItem(null)}
+                onClick={() => onSpawnTroop?.("howitzer")}
+                disabled={!isOwnBase}
+                className="group relative bg-neutral-600/50 hover:bg-neutral-500/70 border-2 border-neutral-500/50 hover:border-amber-500/50 rounded-lg p-2 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed aspect-square flex flex-col items-center justify-center"
+              >
+                <div className="w-[90px] h-[90px] mb-1 flex items-center justify-center">
+                  <HowitzerPreview size={90} />
+                </div>
+                <span className="text-[10px] font-mono text-amber-300 text-center">HOWITZER</span>
+                <span className="text-[10px] font-mono text-amber-400">SPAWN</span>
+              </button>
+
+              {/* APC Spawn Button */}
+              <button
+                onMouseEnter={() => setHoveredItem("spawn-apc")}
+                onMouseLeave={() => setHoveredItem(null)}
+                onClick={() => onSpawnTroop?.("apc")}
+                disabled={!isOwnBase}
+                className="group relative bg-neutral-600/50 hover:bg-neutral-500/70 border-2 border-neutral-500/50 hover:border-amber-500/50 rounded-lg p-2 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed aspect-square flex flex-col items-center justify-center"
+              >
+                <div className="w-[90px] h-[90px] mb-1 flex items-center justify-center">
+                  <APCPreview size={90} />
+                </div>
+                <span className="text-[10px] font-mono text-amber-300 text-center">APC</span>
+                <span className="text-[10px] font-mono text-amber-400">SPAWN</span>
+              </button>
+
+              {/* Placeholder grid items */}
+              {Array.from({ length: 23 }).map((_, i) => (
                 <div
                   key={i}
                   className="bg-neutral-700/20 border border-neutral-600/30 rounded-lg aspect-square flex items-center justify-center"
                 >
-                  <span className="text-neutral-500 text-[9px] font-mono text-center">SOON</span>
+                  <span className="text-neutral-500 text-[9px] font-mono">SOON</span>
                 </div>
               ))}
             </div>

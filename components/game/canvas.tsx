@@ -8,14 +8,9 @@ import { Menu } from "lucide-react"
 import Minimap from "./minimap"
 import BaseManagementMenu from "./menus/base-management"
 import FullPageMenu from "./menus/main-menu"
-import {
-  WORLD_SIZE_TILES,
-  TILE_SIZE_PX,
-  GRASS_PNG_SIZE_TILES,
-  GRASS_PNG_SIZE_PX,
-  CAMERA_MOVE_SPEED,
-  clampTileCoords,
-} from "@/lib/game/constants"
+import { WORLD_SIZE_TILES, TILE_SIZE_PX, CAMERA_MOVE_SPEED, clampTileCoords } from "@/lib/game/constants"
+import type { TroopRenderer } from "@/lib/game/troop-renderer"
+import { getNameplateColor } from "@/lib/game/utils"
 
 interface GameCanvasProps {
   initialState: GameStateData
@@ -48,6 +43,20 @@ interface DefenseData {
   damage_multiplier: number
 }
 
+interface Troop {
+  id: string
+  type: string
+  x: number
+  y: number
+  hullRotation: number
+  turretRotation: number
+  selected: boolean
+  destination: { x: number; y: number } | null
+  speed: number
+  health?: number
+  maxHealth?: number
+}
+
 declare global {
   interface Window {
     _lastBaseRenderLog?: number
@@ -71,6 +80,13 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       3: null,
       4: null,
     })
+    const troopRendererRef = useRef<TroopRenderer | null>(null)
+    const [testTroop, setTestTroop] = useState({
+      x: 100,
+      y: 100,
+      hullRotation: 0,
+      turretRotation: 0,
+    })
     const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 })
     const [username, setUsername] = useState<string>("Player")
     const [allianceId, setAllianceId] = useState<number | null>(null)
@@ -92,6 +108,12 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     const [showUpgradeMenu, setShowUpgradeMenu] = useState(false)
     const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
     const [showFullMenu, setShowFullMenu] = useState(false)
+    const [troops, setTroops] = useState<Troop[]>([])
+    const [selectionBox, setSelectionBox] = useState<{
+      start: { x: number; y: number } | null
+      end: { x: number; y: number } | null
+    }>({ start: null, end: null })
+    const [isSelecting, setIsSelecting] = useState(false)
 
     useImperativeHandle(ref, () => ({
       updateCamera: (x: number, y: number) => {
@@ -333,6 +355,70 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
           })
         }
 
+        setTroops((prevTroops) =>
+          prevTroops
+            .map((troop) => {
+              if (!troop.destination) {
+                return troop
+              }
+
+              const dx = troop.destination.x - troop.x
+              const dy = troop.destination.y - troop.y
+              const distance = Math.sqrt(dx * dx + dy * dy)
+
+              // Reached destination
+              if (distance < 0.5) {
+                if (troop.type === "apc" && homeBaseDataRef.current) {
+                  const baseX = homeBaseDataRef.current.x
+                  const baseY = homeBaseDataRef.current.y
+                  const distToBase = Math.sqrt(Math.pow(troop.x - baseX, 2) + Math.pow(troop.y - baseY, 2))
+
+                  if (distToBase < 5) {
+                    // Within capture range
+                    console.log("[v0] APC reached base at", baseX, baseY)
+                    // APC will be removed and base captured (handled in cleanup below)
+                    return null as any // Remove troop
+                  }
+                }
+
+                return { ...troop, destination: null }
+              }
+
+              // Calculate movement direction and new position
+              const moveX = (dx / distance) * troop.speed
+              const moveY = (dy / distance) * troop.speed
+              const newX = troop.x + moveX
+              const newY = troop.y + moveY
+
+              // Calculate hull rotation based on movement direction (0-71 frames)
+              const angleRad = Math.atan2(dy, dx)
+              const angleDeg = (angleRad * 180) / Math.PI
+              const normalizedAngle = (angleDeg + 360) % 360
+              const hullFrame = Math.floor((normalizedAngle / 360) * 72)
+
+              // Turret handling (only for Howitzer)
+              let newTurretRotation = troop.turretRotation
+              if (troop.type === "howitzer") {
+                const targetTurretFrame = hullFrame
+                const turretDiff = ((targetTurretFrame - troop.turretRotation + 36) % 72) - 36
+                if (Math.abs(turretDiff) > 1) {
+                  newTurretRotation = (troop.turretRotation + Math.sign(turretDiff) * 2 + 72) % 72
+                } else {
+                  newTurretRotation = targetTurretFrame
+                }
+              }
+
+              return {
+                ...troop,
+                x: newX,
+                y: newY,
+                hullRotation: hullFrame,
+                turretRotation: newTurretRotation,
+              }
+            })
+            .filter((t) => t !== null),
+        )
+
         ctx.fillStyle = "#2a2a2a"
         ctx.fillRect(0, 0, canvas.width, canvas.height)
 
@@ -340,8 +426,41 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
         drawIsometricTerrain(ctx, currentState.camera)
 
-        if (currentState.selectionBox.start && currentState.selectionBox.end) {
-          drawSelectionBox(ctx, currentState.selectionBox.start, currentState.selectionBox.end)
+        if (troopRendererRef.current && troopRendererRef.current.isLoaded("howitzer")) {
+          troops.forEach((troop) => {
+            // Draw selection circle if selected
+            if (troop.selected) {
+              const screenX =
+                (troop.x - currentState.camera.x) * TILE_SIZE_PX * currentState.camera.zoom + canvas.width / 2
+              const screenY =
+                (troop.y - currentState.camera.y) * TILE_SIZE_PX * currentState.camera.zoom + canvas.height / 2
+
+              ctx.strokeStyle = "#00ff00"
+              ctx.lineWidth = 2
+              ctx.beginPath()
+              ctx.arc(screenX, screenY, 40 * currentState.camera.zoom, 0, Math.PI * 2)
+              ctx.stroke()
+            }
+
+            troopRendererRef.current!.renderTroop(
+              ctx,
+              troop.type,
+              {
+                x: troop.x,
+                y: troop.y,
+                hullRotation: troop.hullRotation,
+                turretRotation: troop.turretRotation,
+                scale: 0.15,
+              },
+              currentState.camera,
+              canvas.width,
+              canvas.height,
+            )
+          })
+        }
+
+        if (selectionBox.start && selectionBox.end) {
+          drawSelectionBox(ctx, selectionBox.start, selectionBox.end)
         }
 
         animationFrameRef.current = requestAnimationFrame(gameLoop)
@@ -357,17 +476,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
           cancelAnimationFrame(animationFrameRef.current)
         }
       }
-    }, [])
-
-    const getNameplateColor = (baseOwnerId: number, baseAllianceId: number | null): string => {
-      if (baseOwnerId === userIdProp) {
-        return "#22c55e" // Green for own base
-      }
-      if (baseAllianceId && baseAllianceId === allianceId) {
-        return "#3b82f6" // Blue for alliance members
-      }
-      return "#ef4444" // Red for enemies
-    }
+    }, [troops, selectionBox])
 
     const drawIsometricTerrain = (ctx: CanvasRenderingContext2D, camera: { x: number; y: number; zoom: number }) => {
       const cameraTileX = camera.x
@@ -414,27 +523,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         }
       }
 
-      if (grassTileRef.current) {
-        const grassPngSizePx = GRASS_PNG_SIZE_PX * camera.zoom
-
-        const grassStartX = Math.floor(startX / GRASS_PNG_SIZE_TILES) * GRASS_PNG_SIZE_TILES
-        const grassEndX = Math.ceil(endX / GRASS_PNG_SIZE_TILES) * GRASS_PNG_SIZE_TILES
-        const grassStartY = Math.floor(startY / GRASS_PNG_SIZE_TILES) * GRASS_PNG_SIZE_TILES
-        const grassEndY = Math.ceil(endY / GRASS_PNG_SIZE_TILES) * GRASS_PNG_SIZE_TILES
-
-        ctx.filter = "brightness(1.09)"
-
-        for (let x = grassStartX; x < grassEndX; x += GRASS_PNG_SIZE_TILES) {
-          for (let y = grassStartY; y < grassEndY; y += GRASS_PNG_SIZE_TILES) {
-            const screenX = (x - camera.x) * TILE_SIZE_PX * camera.zoom + ctx.canvas.width / 2
-            const screenY = (y - camera.y) * TILE_SIZE_PX * camera.zoom + ctx.canvas.height / 2
-
-            ctx.drawImage(grassTileRef.current, screenX, screenY, grassPngSizePx, grassPngSizePx)
-          }
-        }
-
-        ctx.filter = "none"
-      }
+      // Grass tiles are no longer rendered
 
       if (homeBaseRef.current && homeBaseDataRef.current) {
         const homeBaseData = homeBaseDataRef.current
@@ -601,20 +690,16 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
         } else {
           setShowUpgradeMenu(false)
 
-          // Start selection box
-          setGameState((prev) => ({
-            ...prev,
-            isSelecting: true,
-            selectionBox: { start: { x, y }, end: { x, y } },
-          }))
+          setIsSelecting(true)
+          setSelectionBox({ start: { x, y }, end: { x, y } })
         }
       } else if (e.button === 2) {
-        // Right click for dragging
-        setGameState((prev) => ({
-          ...prev,
-          isDragging: true,
-          dragStart: { x, y },
-        }))
+        const worldX = gameState.camera.x + (x - canvasDimensions.width / 2) / (TILE_SIZE_PX * gameState.camera.zoom)
+        const worldY = gameState.camera.y + (y - canvasDimensions.height / 2) / (TILE_SIZE_PX * gameState.camera.zoom)
+
+        setTroops((prevTroops) =>
+          prevTroops.map((troop) => (troop.selected ? { ...troop, destination: { x: worldX, y: worldY } } : troop)),
+        )
       }
     }
 
@@ -627,11 +712,8 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
 
       setMousePosition({ x, y })
 
-      if (gameState.isSelecting && gameState.selectionBox.start) {
-        setGameState((prev) => ({
-          ...prev,
-          selectionBox: { ...prev.selectionBox, end: { x, y } },
-        }))
+      if (isSelecting && selectionBox.start) {
+        setSelectionBox((prev) => ({ ...prev, end: { x, y } }))
       } else if (gameState.isDragging && gameState.dragStart) {
         const deltaX = x - gameState.dragStart.x
         const deltaY = y - gameState.dragStart.y
@@ -658,12 +740,32 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
     }
 
     const handleMouseUp = () => {
+      if (isSelecting && selectionBox.start && selectionBox.end) {
+        const minX = Math.min(selectionBox.start.x, selectionBox.end.x)
+        const maxX = Math.max(selectionBox.start.x, selectionBox.end.x)
+        const minY = Math.min(selectionBox.start.y, selectionBox.end.y)
+        const maxY = Math.max(selectionBox.start.y, selectionBox.end.y)
+
+        setTroops((prevTroops) =>
+          prevTroops.map((troop) => {
+            const screenX =
+              (troop.x - gameState.camera.x) * TILE_SIZE_PX * gameState.camera.zoom + canvasDimensions.width / 2
+            const screenY =
+              (troop.y - gameState.camera.y) * TILE_SIZE_PX * gameState.camera.zoom + canvasDimensions.height / 2
+
+            const isInBox = screenX >= minX && screenX <= maxX && screenY >= minY && screenY <= maxY
+
+            return { ...troop, selected: isInBox }
+          }),
+        )
+      }
+
+      setIsSelecting(false)
+      setSelectionBox({ start: null, end: null })
       setGameState((prev) => ({
         ...prev,
         isDragging: false,
-        isSelecting: false,
         dragStart: null,
-        selectionBox: { start: null, end: null },
       }))
     }
 
@@ -761,6 +863,30 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
       }
     }
 
+    const handleSpawnTroop = (troopType: string) => {
+      if (!homeBaseDataRef.current) return
+
+      const speed = troopType === "apc" ? 0.1 : 0.1 // 1 tile per second for APC
+      const maxHealth = troopType === "apc" ? 20 : 100
+
+      const newTroop: Troop = {
+        id: `${troopType}-${Date.now()}`,
+        type: troopType,
+        x: homeBaseDataRef.current.x,
+        y: homeBaseDataRef.current.y + 15,
+        hullRotation: 0,
+        turretRotation: 0,
+        selected: false,
+        destination: null,
+        speed: speed,
+        health: maxHealth,
+        maxHealth: maxHealth,
+      }
+
+      setTroops((prev) => [...prev, newTroop])
+      console.log("[v0] Spawned troop:", newTroop)
+    }
+
     return (
       <div className="relative w-full h-screen bg-gray-900 overflow-hidden">
         <canvas
@@ -787,6 +913,7 @@ const GameCanvas = forwardRef<GameCanvasRef, GameCanvasProps>(
             currentUserId={userIdProp || 0}
             defenseData={defenseData || { defense_type: "missile", level: 1, count: 2, damage_multiplier: 1.0 }}
             onUpgrade={handleUpgrade}
+            onSpawnTroop={handleSpawnTroop}
           />
         )}
 
