@@ -39,7 +39,18 @@ export async function signupClient(username: string, email: string, password: st
       return { success: false, error: "Username already taken" }
     }
 
-    // Create auth user
+    // Check if email already exists in users table
+    const { data: existingEmail } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .single()
+
+    if (existingEmail) {
+      return { success: false, error: "Email already registered" }
+    }
+
+    // Create auth user with email confirmation required
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -48,7 +59,7 @@ export async function signupClient(username: string, email: string, password: st
           username,
           ip_address: ip
         },
-        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/game`
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       }
     })
 
@@ -72,65 +83,62 @@ export async function signupClient(username: string, email: string, password: st
       return { success: false, error: "Failed to create user account" }
     }
 
-    console.log("Auth user created, waiting for database trigger...")
+    console.log("Auth user created, email confirmation:", authData.user.confirmed_at ? "Confirmed" : "Pending")
 
-    // Wait for trigger to create profile (with timeout)
-    let profileCheck = null
-    for (let i = 0; i < 10; i++) {
-      await new Promise(resolve => setTimeout(resolve, 500))
+    // For email verification flow, we'll create the profile immediately but mark as unverified
+    const { data: manualProfile, error: profileError } = await supabase
+      .from("users")
+      .insert({
+        auth_user_id: authData.user.id,
+        username,
+        email,
+        ip_address: ip,
+        role: "player",
+        points: 0,
+        is_banned: false,
+        is_muted: false,
+        block_alliance_invites: false,
+        email_verified: false, // Track email verification status
+      })
+      .select("id")
+      .single()
+
+    if (profileError) {
+      console.error("Profile creation failed:", profileError)
       
-      const { data: check } = await supabase
-        .from("users")
-        .select("id")
-        .eq("auth_user_id", authData.user.id)
-        .single()
-        
-      if (check) {
-        profileCheck = check
-        break
+      // Clean up auth user if profile creation fails
+      try {
+        await supabase.auth.admin.deleteUser(authData.user.id)
+      } catch (e) {
+        console.error("Failed to clean up auth user:", e)
       }
-    }
-
-    if (!profileCheck) {
-      console.log("Trigger failed, creating profile manually...")
       
-      const { data: manualProfile, error: profileError } = await supabase
-        .from("users")
-        .insert({
-          auth_user_id: authData.user.id,
-          username,
-          email,
-          ip_address: ip,
-          role: "player",
-          points: 0,
-          is_banned: false,
-          is_muted: false,
-          block_alliance_invites: false,
-        })
-        .select("id")
-        .single()
-
-      if (profileError) {
-        console.error("Manual profile creation failed:", profileError)
-        return {
-          success: false,
-          error: `Failed to create user profile: ${profileError.message}`
-        }
+      return {
+        success: false,
+        error: `Failed to create user profile: ${profileError.message}`
       }
-
-      profileCheck = manualProfile
     }
 
     // Track IP
     await supabase.from("user_ip_history").insert({
-      user_id: profileCheck.id,
+      user_id: manualProfile.id,
       ip_address: ip,
       access_count: 1,
     })
 
-    return { 
-      success: true, 
-      message: authData.session ? "Account created successfully!" : "Account created! Please check your email to verify your account."
+    // Return different success message based on email confirmation status
+    if (authData.user.confirmed_at) {
+      return { 
+        success: true, 
+        message: "Account created successfully!",
+        requiresEmailVerification: false
+      }
+    } else {
+      return { 
+        success: true, 
+        message: "Account created! Please check your email to verify your account before logging in.",
+        requiresEmailVerification: true
+      }
     }
 
   } catch (error) {
@@ -152,7 +160,7 @@ export async function loginClient(username: string, password: string, ip: string
     // Find user by username
     const { data: userData, error: lookupError } = await supabase
       .from("users")
-      .select("email, id, is_banned, username, auth_user_id")
+      .select("email, id, is_banned, username, auth_user_id, email_verified")
       .ilike("username", username)
       .single()
 
@@ -164,6 +172,14 @@ export async function loginClient(username: string, password: string, ip: string
       return { success: false, error: "Account is banned" }
     }
 
+    // Check if email is verified
+    if (!userData.email_verified) {
+      return { 
+        success: false, 
+        error: "Please verify your email address before logging in. Check your inbox for the verification link." 
+      }
+    }
+
     // Sign in with Supabase Auth using email
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email: userData.email,
@@ -172,11 +188,30 @@ export async function loginClient(username: string, password: string, ip: string
 
     if (signInError) {
       console.error("Auth sign in error:", signInError)
-      return { success: false, error: "Invalid username or password" }
+      
+      // Provide more specific error messages
+      if (signInError.message.includes("Invalid login credentials")) {
+        return { success: false, error: "Invalid username or password" }
+      } else if (signInError.message.includes("Email not confirmed")) {
+        return { 
+          success: false, 
+          error: "Please verify your email address before logging in." 
+        }
+      }
+      
+      return { success: false, error: signInError.message || "Login failed" }
     }
 
     if (!signInData.user) {
       return { success: false, error: "Login failed" }
+    }
+
+    // Update email verification status if needed
+    if (signInData.user.confirmed_at && !userData.email_verified) {
+      await supabase
+        .from("users")
+        .update({ email_verified: true })
+        .eq("id", userData.id)
     }
 
     // Sync auth_user_id if needed
@@ -217,5 +252,55 @@ export async function loginClient(username: string, password: string, ip: string
   } catch (error) {
     console.error("Unexpected login error:", error)
     return { success: false, error: "An unexpected error occurred during login" }
+  }
+}
+
+// New function to resend verification email
+export async function resendVerificationEmail(email: string) {
+  const supabase = createBrowserClient()
+
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      }
+    })
+
+    if (error) {
+      console.error("Error resending verification email:", error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, message: "Verification email sent! Please check your inbox." }
+  } catch (error) {
+    console.error("Unexpected error resending verification:", error)
+    return { success: false, error: "Failed to resend verification email" }
+  }
+}
+
+// New function to check verification status
+export async function checkVerificationStatus(userId: string) {
+  const supabase = createBrowserClient()
+
+  try {
+    const { data: userData, error } = await supabase
+      .from("users")
+      .select("email_verified, auth_user_id")
+      .eq("id", userId)
+      .single()
+
+    if (error) {
+      return { success: false, error: "Error checking verification status" }
+    }
+
+    return { 
+      success: true, 
+      emailVerified: userData.email_verified,
+      authUserId: userData.auth_user_id
+    }
+  } catch (error) {
+    return { success: false, error: "Error checking verification status" }
   }
 }
