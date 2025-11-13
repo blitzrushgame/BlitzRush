@@ -20,16 +20,10 @@ export async function getCurrentUser() {
     return null
   }
 
-  // Check if email is verified
-  if (!userData.email_verified) {
-    // Optionally, you might want to handle unverified users differently
-    console.log("User email not verified:", userData.username)
-  }
-
   return userData
 }
 
-// Enhanced signup function with email verification
+// Enhanced signup function that works with your schema
 export async function signup(username: string, password: string, ip: string, email?: string) {
   const supabase = await createClient()
 
@@ -60,12 +54,11 @@ export async function signup(username: string, password: string, ip: string, ema
       return { success: false, error: "Username already taken" }
     }
 
-    // Create Supabase Auth user with email verification
+    // Create Supabase Auth user WITHOUT additional metadata
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userEmail,
       password,
       options: {
-        data: { username, ip_address: ip },
         emailRedirectTo: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/callback`,
       },
     })
