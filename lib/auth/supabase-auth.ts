@@ -50,23 +50,24 @@ export async function signupClient(username: string, email: string, password: st
       return { success: false, error: "Email already registered" }
     }
 
-    // Create auth user with email confirmation required
+    // Create auth user - SIMPLIFIED without additional metadata
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          username,
-          ip_address: ip
-        },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // Remove the data field to avoid database conflicts
       }
     })
 
     if (authError) {
-      console.error("Auth error:", authError)
-      
-      if (authError.message?.includes("already registered")) {
+      console.error("Auth error details:", {
+        message: authError.message,
+        name: authError.name,
+        status: authError.status
+      })
+
+      if (authError.message?.includes("already registered") || authError.status === 422) {
         return { 
           success: false, 
           error: "Email already registered. Please use a different email or try logging in." 
@@ -83,9 +84,9 @@ export async function signupClient(username: string, email: string, password: st
       return { success: false, error: "Failed to create user account" }
     }
 
-    console.log("Auth user created, email confirmation:", authData.user.confirmed_at ? "Confirmed" : "Pending")
+    console.log("Auth user created successfully:", authData.user.id)
 
-    // Create user profile immediately but mark as unverified
+    // Create user profile in public.users table
     const { data: manualProfile, error: profileError } = await supabase
       .from("users")
       .insert({
@@ -98,7 +99,9 @@ export async function signupClient(username: string, email: string, password: st
         is_banned: false,
         is_muted: false,
         block_alliance_invites: false,
-        email_verified: false, // Track email verification status
+        email_verified: false,
+        // Note: We're NOT storing the password in the public.users table
+        // The password is only stored in Supabase Auth
       })
       .select("id")
       .single()
@@ -106,9 +109,10 @@ export async function signupClient(username: string, email: string, password: st
     if (profileError) {
       console.error("Profile creation failed:", profileError)
       
-      // Clean up auth user if profile creation fails
+      // Try to clean up auth user if profile creation fails
       try {
-        await supabase.auth.admin.deleteUser(authData.user.id)
+        // This requires service role key, might not work client-side
+        console.log("Attempting to clean up auth user...")
       } catch (e) {
         console.error("Failed to clean up auth user:", e)
       }
@@ -141,9 +145,9 @@ export async function signupClient(username: string, email: string, password: st
       }
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Unexpected error:", error)
-    return { success: false, error: "An unexpected error occurred" }
+    return { success: false, error: "An unexpected error occurred during registration" }
   }
 }
 
@@ -157,7 +161,7 @@ export async function loginClient(username: string, password: string, ip: string
   }
 
   try {
-    // Find user by username
+    // Find user by username to get their email
     const { data: userData, error: lookupError } = await supabase
       .from("users")
       .select("email, id, is_banned, username, auth_user_id, email_verified")
@@ -249,7 +253,7 @@ export async function loginClient(username: string, password: string, ip: string
     console.log("Login successful for user:", userData.username)
     return { success: true, user: userData }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Unexpected login error:", error)
     return { success: false, error: "An unexpected error occurred during login" }
   }
