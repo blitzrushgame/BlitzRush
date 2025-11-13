@@ -85,7 +85,7 @@ export async function signupClient(username: string, email: string, password: st
 
     console.log("Auth user created, email confirmation:", authData.user.confirmed_at ? "Confirmed" : "Pending")
 
-    // For email verification flow, we'll create the profile immediately but mark as unverified
+    // Create user profile immediately but mark as unverified
     const { data: manualProfile, error: profileError } = await supabase
       .from("users")
       .insert({
@@ -126,11 +126,11 @@ export async function signupClient(username: string, email: string, password: st
       access_count: 1,
     })
 
-    // Return different success message based on email confirmation status
+    // Return success with verification info
     if (authData.user.confirmed_at) {
       return { 
         success: true, 
-        message: "Account created successfully!",
+        message: "Account created successfully! You can now log in.",
         requiresEmailVerification: false
       }
     } else {
@@ -277,30 +277,5 @@ export async function resendVerificationEmail(email: string) {
   } catch (error) {
     console.error("Unexpected error resending verification:", error)
     return { success: false, error: "Failed to resend verification email" }
-  }
-}
-
-// New function to check verification status
-export async function checkVerificationStatus(userId: string) {
-  const supabase = createBrowserClient()
-
-  try {
-    const { data: userData, error } = await supabase
-      .from("users")
-      .select("email_verified, auth_user_id")
-      .eq("id", userId)
-      .single()
-
-    if (error) {
-      return { success: false, error: "Error checking verification status" }
-    }
-
-    return { 
-      success: true, 
-      emailVerified: userData.email_verified,
-      authUserId: userData.auth_user_id
-    }
-  } catch (error) {
-    return { success: false, error: "Error checking verification status" }
   }
 }
