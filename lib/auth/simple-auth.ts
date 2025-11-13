@@ -1,88 +1,141 @@
 import { createClient } from "@/lib/supabase/server"
 
-/**
- * Get the current authenticated user from Supabase Auth
- * Returns user data from public.users table
- */
 export async function getCurrentUser() {
   const supabase = await createClient()
-
-  // Get the current auth user
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser()
-
-  if (!authUser) {
+  
+  const { data: { user: authUser }, error } = await supabase.auth.getUser()
+  
+  if (error || !authUser) {
     return null
   }
 
-  // Get the user data from public.users table
-  const { data: userData, error } = await supabase.from("users").select("*").eq("auth_user_id", authUser.id).single()
+  // Get user data from public.users table
+  const { data: userData, error: userError } = await supabase
+    .from("users")
+    .select("*")
+    .eq("auth_user_id", authUser.id)
+    .single()
 
-  if (error || !userData) {
+  if (userError || !userData) {
     return null
   }
 
   return userData
 }
 
-/**
- * Server-side signup function
- */
 export async function signup(username: string, password: string, ip: string, email?: string) {
   const supabase = await createClient()
 
-  // Use username as email if email not provided (for backwards compatibility)
+  // Validate input
+  if (!username || !password) {
+    return { success: false, error: "Username and password are required" }
+  }
+
+  if (username.length < 3) {
+    return { success: false, error: "Username must be at least 3 characters" }
+  }
+
+  if (password.length < 6) {
+    return { success: false, error: "Password must be at least 6 characters" }
+  }
+
   const userEmail = email || `${username}@blitzrush.local`
 
-  // Check if username already exists
-  const { data: existingUser } = await supabase.from("users").select("id").eq("username", username).single()
+  try {
+    // Check if username already exists
+    const { data: existingUser, error: checkError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("username", username)
+      .single()
 
-  if (existingUser) {
-    return { success: false, error: "Username already taken" }
-  }
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error("Error checking username:", checkError)
+      return { success: false, error: "Database error checking username" }
+    }
 
-  // Create Supabase Auth user
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email: userEmail,
-    password,
-    options: {
-      emailRedirectTo:
-        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${process.env.NEXT_PUBLIC_SUPABASE_URL}/game`,
-    },
-  })
+    if (existingUser) {
+      return { success: false, error: "Username already taken" }
+    }
 
-  if (authError || !authData.user) {
-    return { success: false, error: authError?.message || "Failed to create account" }
-  }
-
-  // Create user record in public.users table
-  const { error: userError } = await supabase.from("users").insert({
-    auth_user_id: authData.user.id,
-    username,
-    email: userEmail,
-    ip_address: ip,
-    role: "player",
-    points: 0,
-    is_banned: false,
-    is_muted: false,
-    block_alliance_invites: false,
-  })
-
-  if (userError) {
-    return { success: false, error: "Failed to create user profile" }
-  }
-
-  // Track registration IP
-  const { data: userData } = await supabase.from("users").select("id").eq("auth_user_id", authData.user.id).single()
-
-  if (userData) {
-    await supabase.from("user_ip_history").insert({
-      user_id: userData.id,
-      ip_address: ip,
-      access_count: 1,
+    // Create Supabase Auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: userEmail,
+      password,
+      options: {
+        data: {
+          username,
+          ip_address: ip
+        },
+        emailRedirectTo: process.env.NODE_ENV === 'development' 
+          ? process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL
+          : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/game`
+      }
     })
-  }
 
-  return { success: true }
+    if (authError) {
+      console.error("Auth error:", authError)
+      return { 
+        success: false, 
+        error: authError.message === 'User already registered' 
+          ? "Email already registered" 
+          : authError.message || "Failed to create account" 
+      }
+    }
+
+    if (!authData.user) {
+      return { success: false, error: "Failed to create user account" }
+    }
+
+    // Create user profile WITHOUT password field
+    const { error: userError } = await supabase
+      .from("users")
+      .insert({
+        auth_user_id: authData.user.id,
+        username,
+        email: userEmail,
+        ip_address: ip,
+        role: "player",
+        points: 0,
+        is_banned: false,
+        is_muted: false,
+        block_alliance_invites: false,
+      })
+
+    if (userError) {
+      console.error("User profile creation error:", userError)
+      
+      // Clean up auth user if profile creation fails
+      await supabase.auth.admin.deleteUser(authData.user.id)
+      
+      return { 
+        success: false, 
+        error: `Failed to create user profile: ${userError.message}` 
+      }
+    }
+
+    // Get the new user ID for IP tracking
+    const { data: newUser } = await supabase
+      .from("users")
+      .select("id")
+      .eq("auth_user_id", authData.user.id)
+      .single()
+
+    if (newUser) {
+      await supabase.from("user_ip_history").insert({
+        user_id: newUser.id,
+        ip_address: ip,
+        access_count: 1,
+      })
+    }
+
+    return { 
+      success: true, 
+      message: authData.session ? "Account created successfully" : "Account created - please check your email to verify"
+    }
+
+  } catch (error) {
+    console.error("Unexpected error during signup:", error)
+    return { success: false, error: "An unexpected error occurred" }
+  }
 }
