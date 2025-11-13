@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { signupClient, loginClient } from "@/lib/auth/supabase-auth"
+import { signupClient, loginClient, resendVerificationEmail } from "@/lib/auth/supabase-auth"
 
 export default function HomePage() {
   const router = useRouter()
@@ -15,23 +15,28 @@ export default function HomePage() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState("")
 
   const handlePlayClick = () => {
     setShowLogin(true)
     setIsSignUp(false)
+    setError("")
+    setSuccess("")
   }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
+    setSuccess("")
 
     try {
-      console.log("[v0] Getting IP address")
+      console.log("Getting IP address")
       const ipRes = await fetch("/api/get-ip")
       const { ip } = await ipRes.json()
 
-      console.log("[v0] Attempting login with username:", username)
+      console.log("Attempting login with username:", username)
       const result = await loginClient(username, password, ip)
 
       if (!result.success) {
@@ -40,10 +45,10 @@ export default function HomePage() {
         return
       }
 
-      console.log("[v0] Login successful, redirecting to game")
+      console.log("Login successful, redirecting to game")
       router.push("/game")
     } catch (err: any) {
-      console.error("[v0] Login error:", err)
+      console.error("Login error:", err)
       setError(err.message || "An error occurred during login")
       setLoading(false)
     }
@@ -53,13 +58,14 @@ export default function HomePage() {
     e.preventDefault()
     setLoading(true)
     setError("")
+    setSuccess("")
 
     try {
-      console.log("[v0] Getting IP address")
+      console.log("Getting IP address")
       const ipRes = await fetch("/api/get-ip")
       const { ip } = await ipRes.json()
 
-      console.log("[v0] Attempting signup with username:", username)
+      console.log("Attempting signup with username:", username)
       const result = await signupClient(username, email, password, ip)
 
       if (!result.success) {
@@ -68,18 +74,53 @@ export default function HomePage() {
         return
       }
 
-      console.log("[v0] Signup successful, showing login screen")
-      setIsSignUp(false)
-      setUsername("")
-      setPassword("")
-      setEmail("")
-      setError("SUCCESS: Registration successful! Please log in.")
+      console.log("Signup successful")
+      
+      if (result.requiresEmailVerification) {
+        setPendingVerificationEmail(email)
+        setSuccess(result.message || "Please check your email to verify your account.")
+      } else {
+        setSuccess(result.message || "Registration successful! You can now log in.")
+        // Reset form for login
+        setIsSignUp(false)
+        setUsername("")
+        setPassword("")
+        setEmail("")
+      }
+      
       setLoading(false)
     } catch (err: any) {
-      console.error("[v0] Signup error:", err)
+      console.error("Signup error:", err)
       setError(err.message || "An error occurred during registration")
       setLoading(false)
     }
+  }
+
+  const handleResendVerification = async () => {
+    if (!pendingVerificationEmail) return
+    
+    setLoading(true)
+    setError("")
+    
+    try {
+      const result = await resendVerificationEmail(pendingVerificationEmail)
+      if (result.success) {
+        setSuccess(result.message)
+      } else {
+        setError(result.error || "Failed to resend verification email")
+      }
+    } catch (err: any) {
+      setError("Failed to resend verification email")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSwitchToLogin = () => {
+    setIsSignUp(!isSignUp)
+    setError("")
+    setSuccess("")
+    setPendingVerificationEmail("")
   }
 
   return (
@@ -125,6 +166,22 @@ export default function HomePage() {
               {isSignUp ? "Create your commander account" : "Sign in to continue your campaign"}
             </p>
 
+            {/* Email Verification Notice */}
+            {pendingVerificationEmail && (
+              <div className="mb-4 p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+                <p className="text-amber-300 text-sm mb-2">
+                  Please check your email to verify your account.
+                </p>
+                <button
+                  onClick={handleResendVerification}
+                  disabled={loading}
+                  className="text-amber-400 hover:text-amber-300 text-sm underline disabled:opacity-50"
+                >
+                  Resend verification email
+                </button>
+              </div>
+            )}
+
             <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
               <div>
                 <label className="block text-neutral-300 text-sm font-medium mb-2">Username</label>
@@ -167,9 +224,15 @@ export default function HomePage() {
               </div>
 
               {error && (
-                <p className={error.startsWith("SUCCESS:") ? "text-green-400 text-sm" : "text-red-400 text-sm"}>
-                  {error.replace("SUCCESS: ", "")}
-                </p>
+                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+                  <p className="text-red-400 text-sm">{error}</p>
+                </div>
+              )}
+
+              {success && !error && (
+                <div className="p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+                  <p className="text-green-400 text-sm">{success}</p>
+                </div>
               )}
 
               <button
@@ -183,10 +246,7 @@ export default function HomePage() {
               <div className="text-center text-sm">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsSignUp(!isSignUp)
-                    setError("")
-                  }}
+                  onClick={handleSwitchToLogin}
                   className="text-amber-400 hover:text-amber-300 transition-colors"
                 >
                   {isSignUp ? "Already enlisted? Login here" : "New recruit? Register here"}
