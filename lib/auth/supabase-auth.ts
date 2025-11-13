@@ -1,239 +1,221 @@
 import { createBrowserClient } from "@/lib/supabase/client"
 
-// Client-side signup function
 export async function signupClient(username: string, email: string, password: string, ip: string) {
   const supabase = createBrowserClient()
 
-  console.log("[v0] Starting signup process for username:", username)
+  console.log("Starting signup process for username:", username)
 
-  const { data: existingUser } = await supabase.from("users").select("id").ilike("username", username).single()
-
-  if (existingUser) {
-    console.log("[v0] Username already exists")
-    return { success: false, error: "Username already taken" }
+  // Input validation
+  if (!username || !email || !password) {
+    return { success: false, error: "All fields are required" }
   }
 
-  console.log("[v0] Creating Supabase Auth user with metadata...")
-  // Create Supabase Auth user with metadata
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/game`,
-      data: {
-        username,
-        ip_address: ip,
-        password: password,
-      },
-    },
-  })
-
-  if (authError) {
-    console.error("[v0] Auth error details:", authError)
-
-    // Check if error is because user already exists
-    if (authError.message?.includes("already registered") || authError.message?.includes("already been registered")) {
-      console.log("[v0] Auth user exists, checking if profile exists...")
-
-      // Try to find existing auth user and create profile for them
-      const { data: signInData } = await supabase.auth.signInWithPassword({ email, password })
-
-      if (signInData?.user) {
-        console.log("[v0] Found existing auth user, checking for profile...")
-
-        const { data: existingProfile } = await supabase
-          .from("users")
-          .select("id")
-          .eq("auth_user_id", signInData.user.id)
-          .single()
-
-        if (!existingProfile) {
-          console.log("[v0] No profile found, creating profile for existing auth user...")
-
-          const { data: newProfile, error: profileError } = await supabase
-            .from("users")
-            .insert({
-              auth_user_id: signInData.user.id,
-              username,
-              email,
-              password: password,
-              ip_address: ip,
-              role: "player",
-              points: 0,
-              is_banned: false,
-              is_muted: false,
-              block_alliance_invites: false,
-            })
-            .select("id")
-            .single()
-
-          if (profileError) {
-            console.error("[v0] Failed to create profile for existing auth user:", profileError)
-            return { success: false, error: `Failed to create profile: ${profileError.message}` }
-          }
-
-          console.log("[v0] Profile created successfully for existing auth user")
-
-          // Track registration IP
-          await supabase.from("user_ip_history").insert({
-            user_id: newProfile.id,
-            ip_address: ip,
-            access_count: 1,
-          })
-
-          return { success: true }
-        } else {
-          console.log("[v0] Profile already exists for this auth user")
-          return { success: false, error: "User already registered" }
-        }
-      }
-    }
-
-    return { success: false, error: authError.message || "Failed to create account" }
+  if (username.length < 3) {
+    return { success: false, error: "Username must be at least 3 characters" }
   }
 
-  if (!authData.user) {
-    console.error("[v0] No auth user returned")
-    return { success: false, error: "Failed to create account" }
+  if (password.length < 6) {
+    return { success: false, error: "Password must be at least 6 characters" }
   }
 
-  console.log("[v0] Auth user created with ID:", authData.user.id)
-  console.log("[v0] Waiting for database trigger to create user profile...")
+  if (!email.includes('@')) {
+    return { success: false, error: "Valid email is required" }
+  }
 
-  // Wait for trigger to create profile
-  await new Promise((resolve) => setTimeout(resolve, 2000))
-
-  const { data: profileCheck } = await supabase
-    .from("users")
-    .select("id, username, email")
-    .eq("auth_user_id", authData.user.id)
-    .single()
-
-  console.log("[v0] Profile verification:", profileCheck)
-
-  if (!profileCheck) {
-    console.log("[v0] Trigger did not create profile. Creating manually as fallback...")
-
-    const { data: manualProfile, error: profileError } = await supabase
+  try {
+    // Check if username exists
+    const { data: existingUser, error: lookupError } = await supabase
       .from("users")
-      .insert({
-        auth_user_id: authData.user.id,
-        username,
-        email,
-        password: password,
-        ip_address: ip,
-        role: "player",
-        points: 0,
-        is_banned: false,
-        is_muted: false,
-        block_alliance_invites: false,
-      })
       .select("id")
+      .ilike("username", username)
       .single()
 
-    if (profileError) {
-      console.error("[v0] Failed to create user profile manually. Full error details:", {
-        message: profileError.message,
-        details: profileError.details,
-        hint: profileError.hint,
-        code: profileError.code,
-      })
-      return {
-        success: false,
-        error: `Database error: ${profileError.message}${profileError.details ? " - " + profileError.details : ""}${profileError.hint ? " (Hint: " + profileError.hint + ")" : ""}`,
+    if (lookupError && lookupError.code !== 'PGRST116') {
+      console.error("Error checking username:", lookupError)
+      return { success: false, error: "Error checking username availability" }
+    }
+
+    if (existingUser) {
+      return { success: false, error: "Username already taken" }
+    }
+
+    // Create auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username,
+          ip_address: ip
+        },
+        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/game`
+      }
+    })
+
+    if (authError) {
+      console.error("Auth error:", authError)
+      
+      if (authError.message?.includes("already registered")) {
+        return { 
+          success: false, 
+          error: "Email already registered. Please use a different email or try logging in." 
+        }
+      }
+      
+      return { 
+        success: false, 
+        error: authError.message || "Failed to create account" 
       }
     }
 
-    console.log("[v0] User profile created manually with ID:", manualProfile.id)
+    if (!authData.user) {
+      return { success: false, error: "Failed to create user account" }
+    }
 
-    // Track registration IP
+    console.log("Auth user created, waiting for database trigger...")
+
+    // Wait for trigger to create profile (with timeout)
+    let profileCheck = null
+    for (let i = 0; i < 10; i++) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      const { data: check } = await supabase
+        .from("users")
+        .select("id")
+        .eq("auth_user_id", authData.user.id)
+        .single()
+        
+      if (check) {
+        profileCheck = check
+        break
+      }
+    }
+
+    if (!profileCheck) {
+      console.log("Trigger failed, creating profile manually...")
+      
+      const { data: manualProfile, error: profileError } = await supabase
+        .from("users")
+        .insert({
+          auth_user_id: authData.user.id,
+          username,
+          email,
+          ip_address: ip,
+          role: "player",
+          points: 0,
+          is_banned: false,
+          is_muted: false,
+          block_alliance_invites: false,
+        })
+        .select("id")
+        .single()
+
+      if (profileError) {
+        console.error("Manual profile creation failed:", profileError)
+        return {
+          success: false,
+          error: `Failed to create user profile: ${profileError.message}`
+        }
+      }
+
+      profileCheck = manualProfile
+    }
+
+    // Track IP
     await supabase.from("user_ip_history").insert({
-      user_id: manualProfile.id,
+      user_id: profileCheck.id,
       ip_address: ip,
       access_count: 1,
     })
 
-    console.log("[v0] Registration IP tracked")
-  } else {
-    console.log("[v0] User profile created successfully by trigger")
-  }
+    return { 
+      success: true, 
+      message: authData.session ? "Account created successfully!" : "Account created! Please check your email to verify your account."
+    }
 
-  return { success: true }
+  } catch (error) {
+    console.error("Unexpected error:", error)
+    return { success: false, error: "An unexpected error occurred" }
+  }
 }
 
-// Client-side login with username
 export async function loginClient(username: string, password: string, ip: string) {
   const supabase = createBrowserClient()
 
-  console.log("[v0] Looking up user by username:", username)
+  console.log("Login attempt for username:", username)
 
-  const { data: userData, error: lookupError } = await supabase
-    .from("users")
-    .select("email, id, is_banned, username, auth_user_id, password")
-    .ilike("username", username)
-    .single()
-
-  console.log("[v0] User lookup result:", { userData, lookupError })
-
-  if (lookupError || !userData) {
-    console.log("[v0] User not found")
-    return { success: false, error: "Invalid username or password" }
+  if (!username || !password) {
+    return { success: false, error: "Username and password are required" }
   }
 
-  console.log("[v0] Found user:", userData.username)
+  try {
+    // Find user by username
+    const { data: userData, error: lookupError } = await supabase
+      .from("users")
+      .select("email, id, is_banned, username, auth_user_id")
+      .ilike("username", username)
+      .single()
 
-  if (userData.is_banned) {
-    console.log("[v0] User is banned")
-    return { success: false, error: "Account is banned" }
-  }
+    if (lookupError || !userData) {
+      return { success: false, error: "Invalid username or password" }
+    }
 
-  if (userData.password !== password) {
-    console.log("[v0] Password mismatch")
-    return { success: false, error: "Invalid username or password" }
-  }
+    if (userData.is_banned) {
+      return { success: false, error: "Account is banned" }
+    }
 
-  console.log("[v0] Password verified, signing in with Supabase Auth for session")
-
-  // Sign in with Supabase Auth to create session
-  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-    email: userData.email,
-    password,
-  })
-
-  if (signInError) {
-    console.log("[v0] Supabase Auth sign in failed, but password was correct. Continuing anyway.")
-  }
-
-  console.log("[v0] Logging IP address")
-
-  if (signInData?.user && (!userData.auth_user_id || userData.auth_user_id !== signInData.user.id)) {
-    console.log("[v0] Syncing auth_user_id for user:", userData.id)
-    await supabase.from("users").update({ auth_user_id: signInData.user.id }).eq("id", userData.id)
-  }
-
-  const { data: ipHistory } = await supabase
-    .from("user_ip_history")
-    .select("id, access_count")
-    .eq("user_id", userData.id)
-    .eq("ip_address", ip)
-    .single()
-
-  if (ipHistory) {
-    await supabase
-      .from("user_ip_history")
-      .update({
-        last_seen: new Date().toISOString(),
-        access_count: ipHistory.access_count + 1,
-      })
-      .eq("id", ipHistory.id)
-  } else {
-    await supabase.from("user_ip_history").insert({
-      user_id: userData.id,
-      ip_address: ip,
-      access_count: 1,
+    // Sign in with Supabase Auth using email
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: userData.email,
+      password,
     })
-  }
 
-  console.log("[v0] Login complete")
-  return { success: true }
+    if (signInError) {
+      console.error("Auth sign in error:", signInError)
+      return { success: false, error: "Invalid username or password" }
+    }
+
+    if (!signInData.user) {
+      return { success: false, error: "Login failed" }
+    }
+
+    // Sync auth_user_id if needed
+    if (!userData.auth_user_id || userData.auth_user_id !== signInData.user.id) {
+      await supabase
+        .from("users")
+        .update({ auth_user_id: signInData.user.id })
+        .eq("id", userData.id)
+    }
+
+    // Track IP
+    const { data: ipHistory } = await supabase
+      .from("user_ip_history")
+      .select("id, access_count")
+      .eq("user_id", userData.id)
+      .eq("ip_address", ip)
+      .single()
+
+    if (ipHistory) {
+      await supabase
+        .from("user_ip_history")
+        .update({
+          last_seen: new Date().toISOString(),
+          access_count: ipHistory.access_count + 1,
+        })
+        .eq("id", ipHistory.id)
+    } else {
+      await supabase.from("user_ip_history").insert({
+        user_id: userData.id,
+        ip_address: ip,
+        access_count: 1,
+      })
+    }
+
+    console.log("Login successful for user:", userData.username)
+    return { success: true, user: userData }
+
+  } catch (error) {
+    console.error("Unexpected login error:", error)
+    return { success: false, error: "An unexpected error occurred during login" }
+  }
 }
