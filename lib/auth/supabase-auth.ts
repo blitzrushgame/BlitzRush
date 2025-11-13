@@ -23,11 +23,11 @@ export async function signupClient(username: string, email: string, password: st
   }
 
   try {
-    // Check if username exists
+    // Check if username exists - FIXED: Use eq instead of ilike
     const { data: existingUser, error: lookupError } = await supabase
       .from("users")
       .select("id")
-      .ilike("username", username)
+      .eq("username", username)
       .single()
 
     if (lookupError && lookupError.code !== 'PGRST116') {
@@ -39,7 +39,7 @@ export async function signupClient(username: string, email: string, password: st
       return { success: false, error: "Username already taken" }
     }
 
-    // Check if email already exists in users table
+    // Check if email already exists
     const { data: existingEmail } = await supabase
       .from("users")
       .select("id")
@@ -50,27 +50,32 @@ export async function signupClient(username: string, email: string, password: st
       return { success: false, error: "Email already registered" }
     }
 
-    // Create auth user - SIMPLIFIED without additional metadata
+    // Create auth user - SIMPLIFIED: No additional options that might cause conflicts
+    console.log("Creating Supabase Auth user...")
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        // Remove any additional data that might conflict with your schema
         emailRedirectTo: `${window.location.origin}/auth/callback`,
-        // Remove the data field to avoid database conflicts
       }
     })
 
     if (authError) {
-      console.error("Auth error details:", {
-        message: authError.message,
-        name: authError.name,
-        status: authError.status
-      })
-
+      console.error("Auth error:", authError)
+      
+      // Handle specific error cases
       if (authError.message?.includes("already registered") || authError.status === 422) {
         return { 
           success: false, 
-          error: "Email already registered. Please use a different email or try logging in." 
+          error: "Email already registered. Please use a different email." 
+        }
+      }
+      
+      if (authError.message?.includes("Database error")) {
+        return {
+          success: false,
+          error: "Authentication service error. Please try again later."
         }
       }
       
@@ -86,51 +91,85 @@ export async function signupClient(username: string, email: string, password: st
 
     console.log("Auth user created successfully:", authData.user.id)
 
-    // Create user profile in public.users table
-    const { data: manualProfile, error: profileError } = await supabase
+    // Wait a moment for any database triggers
+    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    // Check if profile was created by trigger
+    const { data: autoProfile } = await supabase
       .from("users")
-      .insert({
-        auth_user_id: authData.user.id,
-        username,
-        email,
-        ip_address: ip,
-        role: "player",
-        points: 0,
-        is_banned: false,
-        is_muted: false,
-        block_alliance_invites: false,
-        email_verified: false,
-        // Note: We're NOT storing the password in the public.users table
-        // The password is only stored in Supabase Auth
-      })
       .select("id")
+      .eq("auth_user_id", authData.user.id)
       .single()
 
-    if (profileError) {
-      console.error("Profile creation failed:", profileError)
+    if (autoProfile) {
+      console.log("User profile created automatically by trigger")
       
-      // Try to clean up auth user if profile creation fails
-      try {
-        // This requires service role key, might not work client-side
-        console.log("Attempting to clean up auth user...")
-      } catch (e) {
-        console.error("Failed to clean up auth user:", e)
+      // Update the auto-created profile with our data
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({
+          username,
+          email,
+          ip_address: ip,
+          email_verified: authData.user.confirmed_at ? true : false,
+        })
+        .eq("auth_user_id", authData.user.id)
+
+      if (updateError) {
+        console.error("Error updating auto-created profile:", updateError)
       }
-      
-      return {
-        success: false,
-        error: `Failed to create user profile: ${profileError.message}`
+    } else {
+      // Create user profile manually
+      console.log("Creating user profile manually...")
+      const { data: manualProfile, error: profileError } = await supabase
+        .from("users")
+        .insert({
+          auth_user_id: authData.user.id,
+          username,
+          email,
+          ip_address: ip,
+          role: "player",
+          points: 0,
+          is_banned: false,
+          is_muted: false,
+          block_alliance_invites: false,
+          email_verified: authData.user.confirmed_at ? true : false,
+        })
+        .select("id")
+        .single()
+
+      if (profileError) {
+        console.error("Profile creation failed:", profileError)
+        return {
+          success: false,
+          error: `Failed to create user profile: ${profileError.message}`
+        }
       }
+      console.log("User profile created manually:", manualProfile.id)
     }
 
-    // Track IP
-    await supabase.from("user_ip_history").insert({
-      user_id: manualProfile.id,
-      ip_address: ip,
-      access_count: 1,
-    })
+    // Track IP (non-critical, continue even if this fails)
+    try {
+      const { data: userData } = await supabase
+        .from("users")
+        .select("id")
+        .eq("auth_user_id", authData.user.id)
+        .single()
 
-    // Return success with verification info
+      if (userData) {
+        await supabase.from("user_ip_history").insert({
+          user_id: userData.id,
+          ip_address: ip,
+          access_count: 1,
+        })
+        console.log("IP history tracked")
+      }
+    } catch (ipError) {
+      console.error("Failed to track IP:", ipError)
+      // Continue anyway
+    }
+
+    // Return success
     if (authData.user.confirmed_at) {
       return { 
         success: true, 
@@ -140,14 +179,17 @@ export async function signupClient(username: string, email: string, password: st
     } else {
       return { 
         success: true, 
-        message: "Account created! Please check your email to verify your account before logging in.",
+        message: "Account created! Please check your email to verify your account.",
         requiresEmailVerification: true
       }
     }
 
   } catch (error: any) {
-    console.error("Unexpected error:", error)
-    return { success: false, error: "An unexpected error occurred during registration" }
+    console.error("Unexpected error during registration:", error)
+    return { 
+      success: false, 
+      error: error.message || "An unexpected error occurred" 
+    }
   }
 }
 
@@ -161,14 +203,15 @@ export async function loginClient(username: string, password: string, ip: string
   }
 
   try {
-    // Find user by username to get their email
+    // Find user by username - FIXED: Use eq instead of ilike
     const { data: userData, error: lookupError } = await supabase
       .from("users")
       .select("email, id, is_banned, username, auth_user_id, email_verified")
-      .ilike("username", username)
+      .eq("username", username)
       .single()
 
     if (lookupError || !userData) {
+      console.log("User lookup failed:", lookupError)
       return { success: false, error: "Invalid username or password" }
     }
 
@@ -180,11 +223,11 @@ export async function loginClient(username: string, password: string, ip: string
     if (!userData.email_verified) {
       return { 
         success: false, 
-        error: "Please verify your email address before logging in. Check your inbox for the verification link." 
+        error: "Please verify your email address before logging in." 
       }
     }
 
-    // Sign in with Supabase Auth using email
+    // Sign in with Supabase Auth
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email: userData.email,
       password,
@@ -193,14 +236,8 @@ export async function loginClient(username: string, password: string, ip: string
     if (signInError) {
       console.error("Auth sign in error:", signInError)
       
-      // Provide more specific error messages
       if (signInError.message.includes("Invalid login credentials")) {
         return { success: false, error: "Invalid username or password" }
-      } else if (signInError.message.includes("Email not confirmed")) {
-        return { 
-          success: false, 
-          error: "Please verify your email address before logging in." 
-        }
       }
       
       return { success: false, error: signInError.message || "Login failed" }
@@ -210,7 +247,7 @@ export async function loginClient(username: string, password: string, ip: string
       return { success: false, error: "Login failed" }
     }
 
-    // Update email verification status if needed
+    // Update verification status if needed
     if (signInData.user.confirmed_at && !userData.email_verified) {
       await supabase
         .from("users")
@@ -227,27 +264,31 @@ export async function loginClient(username: string, password: string, ip: string
     }
 
     // Track IP
-    const { data: ipHistory } = await supabase
-      .from("user_ip_history")
-      .select("id, access_count")
-      .eq("user_id", userData.id)
-      .eq("ip_address", ip)
-      .single()
-
-    if (ipHistory) {
-      await supabase
+    try {
+      const { data: ipHistory } = await supabase
         .from("user_ip_history")
-        .update({
-          last_seen: new Date().toISOString(),
-          access_count: ipHistory.access_count + 1,
+        .select("id, access_count")
+        .eq("user_id", userData.id)
+        .eq("ip_address", ip)
+        .single()
+
+      if (ipHistory) {
+        await supabase
+          .from("user_ip_history")
+          .update({
+            last_seen: new Date().toISOString(),
+            access_count: ipHistory.access_count + 1,
+          })
+          .eq("id", ipHistory.id)
+      } else {
+        await supabase.from("user_ip_history").insert({
+          user_id: userData.id,
+          ip_address: ip,
+          access_count: 1,
         })
-        .eq("id", ipHistory.id)
-    } else {
-      await supabase.from("user_ip_history").insert({
-        user_id: userData.id,
-        ip_address: ip,
-        access_count: 1,
-      })
+      }
+    } catch (ipError) {
+      console.error("Failed to track IP:", ipError)
     }
 
     console.log("Login successful for user:", userData.username)
@@ -255,11 +296,10 @@ export async function loginClient(username: string, password: string, ip: string
 
   } catch (error: any) {
     console.error("Unexpected login error:", error)
-    return { success: false, error: "An unexpected error occurred during login" }
+    return { success: false, error: "An unexpected error occurred" }
   }
 }
 
-// New function to resend verification email
 export async function resendVerificationEmail(email: string) {
   const supabase = createBrowserClient()
 
@@ -277,9 +317,9 @@ export async function resendVerificationEmail(email: string) {
       return { success: false, error: error.message }
     }
 
-    return { success: true, message: "Verification email sent! Please check your inbox." }
+    return { success: true, message: "Verification email sent!" }
   } catch (error) {
-    console.error("Unexpected error resending verification:", error)
+    console.error("Unexpected error:", error)
     return { success: false, error: "Failed to resend verification email" }
   }
 }
