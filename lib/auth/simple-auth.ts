@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 
 export async function getCurrentUser() {
   const supabase = await createClient()
-  
+
   const { data: { user: authUser }, error } = await supabase.auth.getUser()
   
   if (error || !authUser) {
@@ -20,13 +20,20 @@ export async function getCurrentUser() {
     return null
   }
 
+  // Check if email is verified
+  if (!userData.email_verified) {
+    // Optionally, you might want to handle unverified users differently
+    console.log("User email not verified:", userData.username)
+  }
+
   return userData
 }
 
+// Enhanced signup function with email verification
 export async function signup(username: string, password: string, ip: string, email?: string) {
   const supabase = await createClient()
 
-  // Validate input
+  // Input validation
   if (!username || !password) {
     return { success: false, error: "Username and password are required" }
   }
@@ -42,88 +49,62 @@ export async function signup(username: string, password: string, ip: string, ema
   const userEmail = email || `${username}@blitzrush.local`
 
   try {
-    // Check if username already exists
-    const { data: existingUser, error: checkError } = await supabase
+    // Check if username exists
+    const { data: existingUser } = await supabase
       .from("users")
       .select("id")
       .eq("username", username)
       .single()
 
-    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error("Error checking username:", checkError)
-      return { success: false, error: "Database error checking username" }
-    }
-
     if (existingUser) {
       return { success: false, error: "Username already taken" }
     }
 
-    // Create Supabase Auth user
+    // Create Supabase Auth user with email verification
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userEmail,
       password,
       options: {
-        data: {
-          username,
-          ip_address: ip
-        },
-        emailRedirectTo: process.env.NODE_ENV === 'development' 
-          ? process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL
-          : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/game`
-      }
+        data: { username, ip_address: ip },
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/callback`,
+      },
     })
 
-    if (authError) {
-      console.error("Auth error:", authError)
+    if (authError || !authData.user) {
       return { 
         success: false, 
-        error: authError.message === 'User already registered' 
-          ? "Email already registered" 
-          : authError.message || "Failed to create account" 
+        error: authError?.message || "Failed to create account" 
       }
     }
 
-    if (!authData.user) {
-      return { success: false, error: "Failed to create user account" }
-    }
-
-    // Create user profile WITHOUT password field
-    const { error: userError } = await supabase
-      .from("users")
-      .insert({
-        auth_user_id: authData.user.id,
-        username,
-        email: userEmail,
-        ip_address: ip,
-        role: "player",
-        points: 0,
-        is_banned: false,
-        is_muted: false,
-        block_alliance_invites: false,
-      })
+    // Create user profile with email_verified flag
+    const { error: userError } = await supabase.from("users").insert({
+      auth_user_id: authData.user.id,
+      username,
+      email: userEmail,
+      ip_address: ip,
+      role: "player",
+      points: 0,
+      is_banned: false,
+      is_muted: false,
+      block_alliance_invites: false,
+      email_verified: false, // Will be updated when user verifies email
+    })
 
     if (userError) {
-      console.error("User profile creation error:", userError)
-      
-      // Clean up auth user if profile creation fails
-      await supabase.auth.admin.deleteUser(authData.user.id)
-      
-      return { 
-        success: false, 
-        error: `Failed to create user profile: ${userError.message}` 
-      }
+      return { success: false, error: "Failed to create user profile" }
     }
 
-    // Get the new user ID for IP tracking
-    const { data: newUser } = await supabase
+    // Get user ID for IP tracking
+    const { data: userData } = await supabase
       .from("users")
       .select("id")
       .eq("auth_user_id", authData.user.id)
       .single()
 
-    if (newUser) {
+    if (userData) {
       await supabase.from("user_ip_history").insert({
-        user_id: newUser.id,
+        user_id: userData.id,
         ip_address: ip,
         access_count: 1,
       })
@@ -131,7 +112,10 @@ export async function signup(username: string, password: string, ip: string, ema
 
     return { 
       success: true, 
-      message: authData.session ? "Account created successfully" : "Account created - please check your email to verify"
+      requiresEmailVerification: !authData.user.confirmed_at,
+      message: authData.user.confirmed_at 
+        ? "Account created successfully!" 
+        : "Please check your email to verify your account."
     }
 
   } catch (error) {
