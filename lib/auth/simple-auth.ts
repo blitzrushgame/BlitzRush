@@ -81,7 +81,7 @@ export async function signup(username: string, password: string, ip: string, ema
       is_banned: false,
       is_muted: false,
       block_alliance_invites: false,
-      email_verified: false, // Will be updated when user verifies email
+      email_verified: true, // Will be updated when user verifies email
     })
 
     if (userError) {
