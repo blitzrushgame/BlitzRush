@@ -59,7 +59,7 @@ export async function signup(username: string, password: string, ip: string, ema
       email: userEmail,
       password,
       options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/callback`,
+        emailRedirectTo: `https://blitzrush.vercel.app/auth/callback`,
       },
     })
 
